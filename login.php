@@ -24,7 +24,7 @@ if (isset($_POST['login'])) {
         if (password_verify($password, $user['password'])) {
             $_SESSION['login'] = true;
             $_SESSION['user_id'] = $user['id'];
-            $_SESSION['name'] = $user['name'];
+            $_SESSION['username'] = $user['username'];
 
             header("Location: dashboard.php");
             exit();
@@ -56,5 +56,5 @@ if (isset($_POST['login'])) {
 </form>
 
 <p>
-    Kalau belum punya akun, coba regis dulu <a href="register.php"> Register </a>
+    Kalau belum punya akun, coba regis dulu <a href="registrasi.php"> Register </a>
 </p>

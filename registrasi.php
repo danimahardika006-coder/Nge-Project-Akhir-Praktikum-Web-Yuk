@@ -1,7 +1,8 @@
 <?php   
     include("koneksi.php");
-    if(isset($_POST['register'])){
-        $name = $_POST ['name'];
+    if(isset($_POST['registrasi'])){
+        $username = $_POST ['username'];
+        $nama_lengkap = $_POST ['nama_lengkap'];
         $email = $_POST ['email'];
         $password = $_POST ['password'];
 
@@ -23,10 +24,10 @@
         }else{
             $query = mysqli_prepare(
                 $koneksi,
-                "INSERT INTO users (name, email, password) VALUES (?, ?, ?)"
+                "INSERT INTO users (username, nama_lengkap, email, password) VALUES (?, ?, ?, ?)"
             );
 
-            mysqli_stmt_bind_param($query, "sss", $name, $email, $hashedPassword);
+            mysqli_stmt_bind_param($query, "ssss", $username, $nama_lengkap, $email, $hashedPassword);
             
             if(mysqli_stmt_execute($query)){
                 header("Location: login.php");
@@ -51,8 +52,12 @@
     <h2>
         Form Register
     </h2>
-    <form action="register.php" method="POST">
-        <input type="text" name="name" placeholder="Nama Lengkap" required>
+    <form action="registrasi.php" method="POST">
+        <input type="text" name="username" placeholder="Username" required>
+        <br>
+        <br>
+        
+        <input type="text" name="nama_lengkap" placeholder="Nama Lengkap" required>
         <br>
         <br>
 
@@ -64,7 +69,7 @@
         <br>
         <br>
 
-        <button type="submit" name="register">
+        <button type="submit" name="registrasi">
             Register
         </button>
 
