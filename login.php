@@ -1,60 +1,87 @@
 <?php
 session_start();
 include("koneksi.php");
-if (isset($_POST['login'])) {
 
-    $email = $_POST['email'];
+// Sudah login? langsung ke dashboard.
+if (isset($_SESSION['login']) && $_SESSION['login'] === true) {
+    header("Location: Admin/dashboard.php");
+    exit();
+}
+
+$error = "";
+$email = "";
+
+if (isset($_POST['login'])) {
+    $email    = trim($_POST['email']);
     $password = $_POST['password'];
 
-    //mengecek user berdasarkan email
-    $check = mysqli_prepare(
-        $koneksi,
-        "SELECT * FROM USERS WHERE email = ?"
-    );
-
+    // Cek user berdasarkan email
+    $check = mysqli_prepare($koneksi, "SELECT * FROM users WHERE email = ?");
     mysqli_stmt_bind_param($check, "s", $email);
     mysqli_stmt_execute($check);
-
     $result = mysqli_stmt_get_result($check);
 
     if (mysqli_num_rows($result) == 1) {
         $user = mysqli_fetch_assoc($result);
 
-        //mengecek password
+        // Cek password
         if (password_verify($password, $user['password'])) {
-            $_SESSION['login'] = true;
-            $_SESSION['user_id'] = $user['id'];
+            session_regenerate_id(true);
+            $_SESSION['login']    = true;
+            $_SESSION['user_id']  = $user['id'];
             $_SESSION['username'] = $user['username'];
 
-            header("Location: dashboard.php");
+            header("Location: Admin/dashboard.php");
             exit();
-        } else {
-            echo "Password salah!";
         }
-    } else {
-        echo "Email tidak ditemukan!";
     }
 
+    // Pesan sama untuk email salah maupun password salah
+    $error = "Email atau password tidak cocok. Periksa lagi lalu coba masuk kembali.";
 }
 ?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Masuk · Cuci Sepatu</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main class="auth-layout">
+    <?php include("partials/auth_aside.php"); ?>
 
-<h2>
-    Form Login
-</h2>
-<form method="POST">
-    <input type="email" name="email" placeholder="Email" required>
-    <br>
-    <br>
+    <section class="auth-main">
+        <div class="auth-form-wrap">
+            <h1 class="auth-title">Masuk</h1>
+            <p class="auth-sub">Gunakan akun yang terdaftar untuk membuka dashboard.</p>
 
-    <input type="password" name="password" placeholder="Password" required>
-    <br>
-    <br>
+            <?php if ($error !== ""): ?>
+                <div class="alert alert-danger" role="alert"><?php echo htmlspecialchars($error); ?></div>
+            <?php endif; ?>
 
-    <button type="submit" name="login">
-        Login
-    </button>
-</form>
+            <form class="auth-form" method="POST">
+                <div class="field">
+                    <label for="email">Email</label>
+                    <input class="input" type="email" id="email" name="email" autocomplete="email"
+                           value="<?php echo htmlspecialchars($email); ?>" required <?php echo $error !== "" ? "" : "autofocus"; ?>>
+                </div>
 
-<p>
-    Kalau belum punya akun, coba regis dulu <a href="registrasi.php"> Register </a>
-</p>
+                <div class="field">
+                    <label for="password">Password</label>
+                    <input class="input" type="password" id="password" name="password" autocomplete="current-password" required <?php echo $error !== "" ? "autofocus" : ""; ?>>
+                </div>
+
+                <button class="btn btn-primary btn-block" type="submit" name="login">Masuk</button>
+            </form>
+
+            <p class="auth-alt">Belum punya akun? <a href="registrasi.php">Daftar di sini</a></p>
+        </div>
+    </section>
+</main>
+</body>
+</html>
