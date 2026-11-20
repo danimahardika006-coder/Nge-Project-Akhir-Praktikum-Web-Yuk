@@ -1,6 +1,6 @@
 # Cuci Sepatu — Sistem Booking & Kasir
 
-Aplikasi web cuci sepatu dengan dua sisi: **panel kasir** untuk pesanan walk-in (fitur lama) dan **sistem booking online** dengan akun pelanggan, riwayat cucian, dan pelacakan status (fitur baru). Dibangun dengan PHP murni + MySQL/MariaDB tanpa framework.
+Aplikasi web cuci sepatu dengan dua sisi: **panel kasir** untuk pesanan walk-in dan **sistem booking online** dengan akun pelanggan, riwayat cucian, dan pelacakan status (fitur baru). Dibangun dengan PHP murni + MySQL/MariaDB tanpa framework.
 
 ---
 
