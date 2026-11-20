@@ -1,41 +1,9 @@
 <?php
-session_start();
-include("koneksi.php");
-// ---------- Fungsi bantu (dibuat mandiri agar halaman ini tidak bergantung file lain) ----------
-if (!function_exists('e')) {
-    function e($teks) {
-        return htmlspecialchars((string) $teks, ENT_QUOTES, 'UTF-8');
-    }
-}
+require_once __DIR__ . '/partials/init.php';
 
-if (!function_exists('rupiah')) {
-    function rupiah($angka) {
-        return "Rp " . number_format((float) $angka, 0, ',', '.');
-    }
-}
+// e(), rupiah(), tanggal_id(), samarkan_hp() tersedia dari partials/init.php
 
-if (!function_exists('tanggal_id')) {
-    function tanggal_id($tanggal) {
-        $bulan = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-        $t = strtotime($tanggal);
-        return $t ? date('j', $t) . ' ' . $bulan[(int) date('n', $t)] . ' ' . date('Y', $t) : $tanggal;
-    }
-}
-
-// Samarkan nomor HP untuk halaman publik: 0812••••678
-if (!function_exists('samarkan_hp')) {
-    function samarkan_hp($hp) {
-        $hp = trim((string) $hp);
-        $n  = strlen($hp);
-        if ($n <= 7) {
-            return $hp;
-        }
-        return substr($hp, 0, 4) . str_repeat('•', $n - 7) . substr($hp, -3);
-    }
-}
-
-
-// Tahap pesanan berurutan beserta pesan untuk pelanggan
+// ---------- Lacak pesanan kasir (tabel transactions, format TRX-…) ----------
 $tahap_pesan = [
     'Antrean' => 'Sepatu sudah kami terima dan sedang menunggu giliran dicuci.',
     'Dicuci'  => 'Sepatu kamu sedang dalam proses pencucian.',
@@ -48,14 +16,43 @@ $input = isset($_GET['no_pesanan']) ? trim($_GET['no_pesanan']) : null;
 $error = "";
 $error_tipe = "danger";
 $order = null;
+$booking_saya = null;
+$reverse = [];
 
+// ---------- Lacak booking online (tabel bookings, format BK-…) ----------
 if ($input !== null) {
     $kode = strtoupper($input);
 
     if ($kode === "") {
         $error = "Masukkan nomor pesanan terlebih dahulu.";
+    } elseif (preg_match('/^BK-[0-9A-Z-]+$/', $kode)) {
+        if (!is_customer()) {
+            $error = "Booking online hanya bisa dilihat dari akun pemiliknya. Silakan masuk lebih dulu.";
+            $error_tipe = "warning";
+        } else {
+            $stmt = mysqli_prepare(
+                $koneksi,
+                "SELECT b.*, s.nama_layanan, p.nama_paket
+                 FROM bookings b
+                 JOIN services s ON s.id = b.service_id
+                 LEFT JOIN pakets p ON p.id = b.paket_id
+                 WHERE b.kode_booking = ? AND b.user_id = ? LIMIT 1"
+            );
+            mysqli_stmt_bind_param($stmt, 'si', $kode, $_SESSION['user_id']);
+            mysqli_stmt_execute($stmt);
+            $booking_saya = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt)) ?: null;
+            mysqli_stmt_close($stmt);
+
+            if (!$booking_saya) {
+                $error = "Booking $kode tidak ditemukan di akun kamu.";
+                $error_tipe = "warning";
+            } else {
+                header('Location: customer/detail_booking.php?id=' . (int) $booking_saya['id']);
+                exit();
+            }
+        }
     } elseif (!preg_match('/^TRX-\d{8}-\d{3}$/', $kode)) {
-        $error = "Format nomor pesanan belum sesuai. Contoh yang benar: TRX-20261115-412.";
+        $error = "Format nomor belum sesuai. Contoh: TRX-20261115-412 atau BK-20261115-A1B2.";
     } else {
         // Batasi pencarian: maksimal 10 kali per menit per pengunjung
         $sekarang  = time();
@@ -116,6 +113,19 @@ if ($order) {
             <span class="brand-mark" aria-hidden="true"></span>
             Cuci Sepatu
         </a>
+        <nav class="mainnav" aria-label="Navigasi">
+            <?php if (is_customer()): ?>
+                <a class="nav-link" href="customer/dashboard.php">Dashboard</a>
+                <a class="nav-link" href="customer/booking.php">Booking</a>
+                <a class="nav-link" href="customer/riwayat.php">Riwayat</a>
+                <a class="nav-link" href="logout.php">Keluar</a>
+            <?php elseif (is_admin()): ?>
+                <a class="nav-link" href="dashboard.php">Panel admin</a>
+            <?php else: ?>
+                <a class="nav-link" href="login.php">Masuk</a>
+                <a class="nav-link nav-link-aktif" href="registrasi.php">Daftar</a>
+            <?php endif; ?>
+        </nav>
     </div>
 </header>
 
@@ -123,14 +133,14 @@ if ($order) {
 
     <div class="track-intro">
         <h1 class="page-title">Lacak pesanan</h1>
-        <p class="page-date">Masukkan nomor pesanan yang tertera di nota untuk melihat sudah sampai tahap mana sepatu kamu.</p>
+        <p class="page-date">Masukkan nomor pesanan dari nota, atau nomor booking <strong>BK-</strong> untuk pesanan online yang kamu buat sendiri.</p>
     </div>
 
     <form class="search" method="GET" action="tracking.php" novalidate>
         <div class="field">
-            <label for="no_pesanan">Nomor pesanan</label>
+            <label for="no_pesanan">Nomor pesanan atau booking</label>
             <input class="input input-code" type="text" id="no_pesanan" name="no_pesanan"
-                   placeholder="TRX-20261115-412" maxlength="20"
+                   placeholder="TRX-20261115-412 / BK-20261115-A1B2" maxlength="24"
                    autocomplete="off" autocapitalize="characters" spellcheck="false"
                    value="<?php echo e($input ?? ''); ?>"
                    <?php echo $error !== "" ? 'aria-invalid="true" aria-describedby="pesan-error"' : ''; ?>>

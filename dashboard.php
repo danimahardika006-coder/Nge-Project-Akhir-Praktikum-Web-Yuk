@@ -1,28 +1,10 @@
 <?php
-session_start();
-include("koneksi.php");
+require_once __DIR__ . '/partials/init.php';
 
-// 1. Cek apakah sudah login
-if (!isset($_SESSION['login']) || $_SESSION['login'] !== true) {
-    header("Location: login.php");
-    exit();
-}
+// 1. Hanya admin yang boleh membuka panel kasir
+$admin = butuh_admin();
 
 // ---------- Helper ----------
-function e($teks) {
-    return htmlspecialchars((string) $teks, ENT_QUOTES, 'UTF-8');
-}
-
-function rupiah($angka) {
-    return "Rp " . number_format((float) $angka, 0, ',', '.');
-}
-
-function tanggal_id($tanggal) {
-    $bulan = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    $t = strtotime($tanggal);
-    return $t ? date('j', $t) . ' ' . $bulan[(int) date('n', $t)] . ' ' . date('Y', $t) : $tanggal;
-}
-
 // Simpan pesan lalu muat ulang halaman, agar refresh tidak mengirim form dua kali
 function kembali_dengan_pesan($teks, $tipe, $sorot = null) {
     $_SESSION['flash'] = ['teks' => $teks, 'tipe' => $tipe, 'sorot' => $sorot];
@@ -52,6 +34,7 @@ $old = [
 
 // 2. Proses tambah transaksi baru
 if (isset($_POST['tambahTransaksi'])) {
+    wajib_csrf();
     $nama_pelanggan = trim($_POST['nama_pelanggan']);
     $no_hp          = trim($_POST['no_hp']);
     $service_id     = intval($_POST['service_id']);
@@ -102,6 +85,7 @@ if (isset($_POST['tambahTransaksi'])) {
 
 // 3. Update status transaksi
 if (isset($_POST['updateStatus'])) {
+    wajib_csrf();
     $trx_id       = intval($_POST['trx_id']);
     $status_baru  = trim($_POST['status']);
     $valid_status = ['Antrean', 'Dicuci', 'Selesai', 'Diambil'];
@@ -119,6 +103,7 @@ if (isset($_POST['updateStatus'])) {
 
 // 4. Hapus transaksi
 if (isset($_POST['hapus'])) {
+    wajib_csrf();
     $id_hapus = intval($_POST['trx_id']);
     $stmt_del = mysqli_prepare($koneksi, "DELETE FROM transactions WHERE id = ?");
     mysqli_stmt_bind_param($stmt_del, "i", $id_hapus);
@@ -178,8 +163,23 @@ $hari_ini = $hari[(int) date('w')] . ', ' . tanggal_id(date('Y-m-d'));
     <div class="topbar-inner">
         <a class="brand" href="dashboard.php">
             <span class="brand-mark" aria-hidden="true"></span>
-            Cuci Sepatu
+            Cuci Sepatu <span class="brand-sub">Admin</span>
         </a>
+
+        <nav class="mainnav" aria-label="Navigasi admin">
+            <a class="nav-link nav-link-aktif" href="dashboard.php">Kasir</a>
+            <a class="nav-link" href="admin/data_booking.php">
+                Booking<?php
+                    $n_konfirmasi = 0;
+                    $q = mysqli_query($koneksi, "SELECT COUNT(*) AS n FROM bookings WHERE status = 'menunggu_konfirmasi'");
+                    if ($q) { $n_konfirmasi = (int) mysqli_fetch_assoc($q)['n']; }
+                    echo $n_konfirmasi > 0 ? ' <span class="nav-dot num">' . $n_konfirmasi . '</span>' : '';
+                ?>
+            </a>
+            <a class="nav-link" href="admin/data_pelanggan.php">Pelanggan</a>
+            <a class="nav-link" href="admin/data_layanan.php">Layanan</a>
+        </nav>
+
         <div class="userbar">
             <span class="who">Masuk sebagai <strong><?php echo e($_SESSION['username']); ?></strong></span>
             <a href="logout.php">Keluar</a>
@@ -263,6 +263,7 @@ $hari_ini = $hari[(int) date('w')] . ', ' . tanggal_id(date('Y-m-d'));
                             <td class="col-money num" data-label="Total"><?php echo e(rupiah($trx['total_harga'])); ?></td>
                             <td data-label="Status">
                                 <form method="POST" class="status" data-status="<?php echo e($trx['status']); ?>">
+                                    <?php echo csrf_field(); ?>
                                     <input type="hidden" name="trx_id" value="<?php echo (int) $trx['id']; ?>">
                                     <input type="hidden" name="updateStatus" value="1">
                                     <label class="sr-only" for="status-<?php echo (int) $trx['id']; ?>">Status pesanan <?php echo e($trx['no_pesanan']); ?></label>
@@ -298,6 +299,7 @@ $hari_ini = $hari[(int) date('w')] . ', ' . tanggal_id(date('Y-m-d'));
                 <p class="panel-sub">Status awal otomatis Antrean.</p>
             </div>
             <form class="panel-body" method="POST">
+                <?php echo csrf_field(); ?>
                 <div class="field">
                     <label for="nama_pelanggan">Nama pelanggan</label>
                     <input class="input" type="text" id="nama_pelanggan" name="nama_pelanggan" autocomplete="off"
@@ -340,6 +342,7 @@ $hari_ini = $hari[(int) date('w')] . ', ' . tanggal_id(date('Y-m-d'));
 
 <dialog class="dialog" id="dialog-hapus" aria-labelledby="dialog-judul">
     <form method="POST">
+        <?php echo csrf_field(); ?>
         <h2 id="dialog-judul">Hapus pesanan?</h2>
         <p>Pesanan <strong id="dialog-nomor"></strong> akan dihapus permanen dan tidak bisa dikembalikan.</p>
         <input type="hidden" name="trx_id" id="dialog-id" value="">

@@ -1,31 +1,31 @@
 <aside class="auth-aside">
-    <a class="brand" href="login.php">
+    <a class="brand" href="<?php echo e(url('')); ?>">
         <span class="brand-mark" aria-hidden="true"></span>
         Cuci Sepatu
     </a>
 
     <div>
-        <p class="auth-lede">Catat sepatu masuk, pantau setiap tahap cucian, sampai pemiliknya datang mengambil.</p>
+        <p class="auth-lede">Pesan cuci sepatu online, pantau setiap tahap cucian, sampai sepatu bersih kembali.</p>
 
         <ol class="flow" aria-label="Alur pesanan">
             <li>
-                <strong>Antrean</strong>
-                <span>Sepatu dicatat dan mendapat nomor pesanan.</span>
+                <strong>Buat booking</strong>
+                <span>Pilih layanan, paket, tanggal, dan jam ambil.</span>
+            </li>
+            <li>
+                <strong>Dikonfirmasi</strong>
+                <span>Admin memastikan slot dan harga pesanan kamu.</span>
             </li>
             <li>
                 <strong>Dicuci</strong>
-                <span>Sedang dikerjakan.</span>
+                <span>Pantau progres langsung dari dashboard.</span>
             </li>
             <li>
                 <strong>Selesai</strong>
-                <span>Siap diambil pelanggan.</span>
-            </li>
-            <li>
-                <strong>Diambil</strong>
-                <span>Pesanan ditutup dan masuk ke pendapatan.</span>
+                <span>Ambil sepatu, riwayat tersimpan rapi.</span>
             </li>
         </ol>
     </div>
 
-    <p class="auth-foot">Panel kasir dan operasional</p>
+    <p class="auth-foot">Booking online &amp; riwayat cucian</p>
 </aside>

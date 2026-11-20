@@ -1,43 +1,72 @@
 <?php
-session_start();
-include("koneksi.php");
+require_once __DIR__ . '/partials/init.php';
 
-// Sudah login? langsung ke dashboard.
-if (isset($_SESSION['login']) && $_SESSION['login'] === true) {
-    header("Location: dashboard.php");
-    exit();
+// Sudah login? langsung ke halaman sesuai peran.
+if (sudah_login()) {
+    $u = user_aktif($koneksi);
+    if ($u !== null) {
+        alihkan($u['role'] === 'admin' ? 'dashboard.php' : 'customer/dashboard.php');
+    }
 }
 
-$error = "";
-$email = "";
+$error  = '';
+$info   = '';
+$email  = '';
+$next   = $_GET['next'] ?? '';
+$daftar_baru = isset($_GET['daftar']);
+
+if (isset($_GET['expired'])) {
+    $info = 'Sesi kamu berakhir karena tidak ada aktivitas. Silakan masuk kembali.';
+}
 
 if (isset($_POST['login'])) {
-    $email    = trim($_POST['email']);
-    $password = $_POST['password'];
+    $email    = trim($_POST['email'] ?? '');
+    $password = (string) ($_POST['password'] ?? '');
 
-    // Cek user berdasarkan email
-    $check = mysqli_prepare($koneksi, "SELECT * FROM users WHERE email = ?");
-    mysqli_stmt_bind_param($check, "s", $email);
-    mysqli_stmt_execute($check);
-    $result = mysqli_stmt_get_result($check);
+    if ($email === '' || $password === '') {
+        $error = 'Email dan password wajib diisi.';
+    } else {
+        $stmt = mysqli_prepare(
+            $koneksi,
+            "SELECT id, username, nama_lengkap, email, password, role, status_akun
+             FROM users WHERE email = ? LIMIT 1"
+        );
+        mysqli_stmt_bind_param($stmt, 's', $email);
+        mysqli_stmt_execute($stmt);
+        $result = mysqli_stmt_get_result($stmt);
+        $user   = mysqli_fetch_assoc($result);
+        mysqli_stmt_close($stmt);
 
-    if (mysqli_num_rows($result) == 1) {
-        $user = mysqli_fetch_assoc($result);
+        // Pesan seragam untuk email salah maupun password salah.
+        if ($user && password_verify($password, $user['password'])) {
+            if ($user['status_akun'] !== 'aktif') {
+                $error = 'Akun ini sedang dinonaktifkan. Hubungi admin untuk informasi lebih lanjut.';
+            } else {
+                // Perbaiki hash bila algoritma default berubah.
+                if (password_needs_rehash($user['password'], PASSWORD_DEFAULT)) {
+                    $hash = password_hash($password, PASSWORD_DEFAULT);
+                    $upd  = mysqli_prepare($koneksi, 'UPDATE users SET password = ? WHERE id = ?');
+                    mysqli_stmt_bind_param($upd, 'si', $hash, $user['id']);
+                    mysqli_stmt_execute($upd);
+                    mysqli_stmt_close($upd);
+                }
 
-        // Cek password
-        if (password_verify($password, $user['password'])) {
-            session_regenerate_id(true);
-            $_SESSION['login']    = true;
-            $_SESSION['user_id']  = $user['id'];
-            $_SESSION['username'] = $user['username'];
+                $upd = mysqli_prepare($koneksi, 'UPDATE users SET diperbarui_pada = NOW() WHERE id = ?');
+                mysqli_stmt_bind_param($upd, 'i', $user['id']);
+                mysqli_stmt_execute($upd);
+                mysqli_stmt_close($upd);
 
-            header("Location: dashboard.php");
-            exit();
+                set_session_user($user);
+
+                if ($user['role'] === 'admin') {
+                    alihkan('dashboard.php');
+                }
+                alihkan('customer/dashboard.php');
+            }
+        } else {
+            $error = 'Email atau password tidak cocok. Periksa lagi lalu coba masuk kembali.';
         }
     }
-
-    // Pesan sama untuk email salah maupun password salah
-    $error = "Email atau password tidak cocok. Periksa lagi lalu coba masuk kembali.";
 }
 ?>
 <!DOCTYPE html>
@@ -53,33 +82,45 @@ if (isset($_POST['login'])) {
 </head>
 <body>
 <main class="auth-layout">
-    <?php include("partials/auth_aside.php"); ?>
+    <?php include __DIR__ . '/partials/auth_aside.php'; ?>
 
     <section class="auth-main">
         <div class="auth-form-wrap">
             <h1 class="auth-title">Masuk</h1>
-            <p class="auth-sub">Gunakan akun yang terdaftar untuk membuka dashboard.</p>
+            <p class="auth-sub">
+                <?php echo $next === 'customer'
+                    ? 'Masuk untuk melihat booking dan riwayat cucian kamu.'
+                    : 'Gunakan akun yang terdaftar untuk membuka dashboard.'; ?>
+            </p>
 
-            <?php if ($error !== ""): ?>
-                <div class="alert alert-danger" role="alert"><?php echo htmlspecialchars($error); ?></div>
+            <?php if ($info !== ''): ?>
+                <div class="alert alert-warning" role="status"><?php echo e($info); ?></div>
+            <?php endif; ?>
+
+            <?php if ($error !== ''): ?>
+                <div class="alert alert-danger" role="alert"><?php echo e($error); ?></div>
             <?php endif; ?>
 
             <form class="auth-form" method="POST">
+                <?php echo csrf_field(); ?>
                 <div class="field">
                     <label for="email">Email</label>
                     <input class="input" type="email" id="email" name="email" autocomplete="email"
-                           value="<?php echo htmlspecialchars($email); ?>" required <?php echo $error !== "" ? "" : "autofocus"; ?>>
+                           value="<?php echo e($email); ?>" required <?php echo $error !== '' ? '' : 'autofocus'; ?>>
                 </div>
 
                 <div class="field">
                     <label for="password">Password</label>
-                    <input class="input" type="password" id="password" name="password" autocomplete="current-password" required <?php echo $error !== "" ? "autofocus" : ""; ?>>
+                    <input class="input" type="password" id="password" name="password" autocomplete="current-password" required <?php echo $error !== '' ? 'autofocus' : ''; ?>>
                 </div>
 
                 <button class="btn btn-primary btn-block" type="submit" name="login">Masuk</button>
             </form>
 
             <p class="auth-alt">Belum punya akun? <a href="registrasi.php">Daftar di sini</a></p>
+            <p class="auth-alt" style="border-top:0;padding-top:var(--s2);margin-top:var(--s2)">
+                Hanya ingin mengecek status cucian? <a href="tracking.php">Lacak dengan nomor pesanan</a>
+            </p>
         </div>
     </section>
 </main>
