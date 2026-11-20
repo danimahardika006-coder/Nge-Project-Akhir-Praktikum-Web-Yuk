@@ -284,5 +284,3 @@ Output diakhiri dengan rekap `LULUS: N  GAGAL: N`.
 | Mau tambah layanan template bawaan | Tambah baris di array `$template_layanan` di `database/migrate.php`, lalu jalankan ulang migrasi |
 
 ---
-
-*Panduan memahami kodenya ada di [`PANDUAN-KODE.md`](PANDUAN-KODE.md).*
