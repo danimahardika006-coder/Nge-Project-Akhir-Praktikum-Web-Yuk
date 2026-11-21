@@ -148,13 +148,17 @@ require dirname(__DIR__) . '/partials/header_admin.php';
 
                 <div class="field">
                     <label for="status">Status baru</label>
-                    <select class="select" id="status" name="status" required>
+                    <select class="select" id="status" name="status" required
+                            data-status-sekarang="<?php echo e($b['status']); ?>">
                         <?php foreach (status_booking_semua() as $kode => $info): ?>
-                            <option value="<?php echo e($kode); ?>" <?php echo $kode === $b['status'] ? 'selected' : ''; ?>>
-                                <?php echo e($info['label']); ?>
+                            <option value="<?php echo e($kode); ?>"
+                                    data-mundur="<?php echo status_mundur($b['status'], $kode) ? '1' : '0'; ?>"
+                                    <?php echo $kode === $b['status'] ? 'selected' : ''; ?>>
+                                <?php echo e($info['label']); ?><?php echo status_mundur($b['status'], $kode) ? ' ↩' : ''; ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
+                    <p class="field-hint">Status boleh dimundurkan bila salah klik. Setiap perubahan tetap tercatat di riwayat.</p>
                 </div>
 
                 <div class="field">
@@ -209,3 +213,20 @@ require dirname(__DIR__) . '/partials/header_admin.php';
 </div>
 
 <?php require dirname(__DIR__) . '/partials/footer_customer.php'; ?>
+
+<script>
+// Konfirmasi saat status dimundurkan. Ini hanya pengaman salah klik —
+// server tetap menerima perubahan, dan riwayatnya tetap tercatat.
+(function () {
+    var sel = document.getElementById('status');
+    if (!sel) return;
+    sel.form.addEventListener('submit', function (ev) {
+        var opt = sel.options[sel.selectedIndex];
+        if (opt && opt.getAttribute('data-mundur') === '1') {
+            if (!confirm('Mundurkan status ke "' + opt.text.replace(' ↩', '') + '"?\n\nPelanggan akan melihat status ini.')) {
+                ev.preventDefault();
+            }
+        }
+    });
+})();
+</script>

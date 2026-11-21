@@ -230,6 +230,49 @@ function status_berjalan(): array
     return ['menunggu_konfirmasi', 'dikonfirmasi', 'sepatu_diterima', 'dicuci', 'quality_control', 'siap_diambil'];
 }
 
+/**
+ * Peta status transaksi kasir (walk-in) → token warna CSS.
+ * Label sudah sesuai teks yang tersimpan di kolom transactions.status.
+ */
+function status_kasir_warna(string $status): string
+{
+    $map = [
+        'Antrean' => 'tunggu',
+        'Dicuci'  => 'proses',
+        'Selesai' => 'siap',
+        'Diambil' => 'selesai',
+    ];
+    return $map[$status] ?? 'netral';
+}
+
+/**
+ * Posisi status pada alur tahap (0 = paling awal).
+ * Status di luar alur ('dibatalkan') mengembalikan -1.
+ */
+function status_posisi($status): int
+{
+    $i = array_search((string) $status, status_tahap(), true);
+    return $i === false ? -1 : (int) $i;
+}
+
+/**
+ * Apakah perpindahan $dari → $ke berarti memundurkan pengerjaan?
+ *
+ * Admin memang boleh memundurkan status (misal salah klik "Siap Diambil"
+ * padahal belum selesai). Fungsi ini hanya dipakai untuk memberi tanda
+ * peringatan di UI dan konfirmasi sebelum menyimpan — bukan untuk melarang.
+ */
+function status_mundur($dari, $ke): bool
+{
+    $a = status_posisi($dari);
+    $b = status_posisi($ke);
+    // d−1 = status di luar alur (mis. dibatalkan) → anggap bukan "mundur".
+    if ($a < 0 || $b < 0) {
+        return false;
+    }
+    return $b < $a;
+}
+
 /** Token warna status untuk atribut data-warna CSS. */
 function status_warna($status): string
 {
@@ -422,6 +465,21 @@ function normalisasi_hp($hp): string
     return $hp;
 }
 
+/**
+ * Bentuk akhir nomor HP untuk pencocokan antar tabel.
+ * "+62 812-3456-7890", "6281234567890", "081234567890" → "081234567890".
+ */
+function hp_kanonik($hp): string
+{
+    return normalisasi_hp(preg_replace('/\D+/', '', (string) $hp));
+}
+
+/** Kolom nomor HP dari tabel tertentu dalam bentuk kanonik — dipakai di WHERE. */
+function sql_hp_kanonik(string $kolom): string
+{
+    return "REPLACE(REPLACE(REPLACE(REPLACE($kolom, ' ', ''), '-', ''), '+', ''), '.', '')";
+}
+
 // --------------------------------------------------------------------------
 // Booking — kode, slot waktu, harga
 // --------------------------------------------------------------------------
@@ -520,4 +578,76 @@ function catat_status(mysqli $db, $booking_id, $status, $oleh, $catatan = null):
     $stmt->bind_param('issi', $booking_id, $status, $catatan, $oleh);
     $stmt->execute();
     $stmt->close();
+}
+
+// --------------------------------------------------------------------------
+// Transaksi kasir (walk-in) milik pelanggan
+// --------------------------------------------------------------------------
+
+/**
+ * Pesanan walk-in yang tercatat dengan nomor HP pelanggan ini.
+ * Pencocokan memakai bentuk kanonik (tanpa spasi/strip/titik, awalan 62 → 0)
+ * supaya "0812-3456-7890" di nota kasir tetap cocok dengan "081234567890"
+ * yang tersimpan di profil akun.
+ */
+function transaksi_pelanggan(mysqli $db, string $no_hp): array
+{
+    $kanon = hp_kanonik($no_hp);
+    if ($kanon === '') {
+        return [];
+    }
+
+    $sql = 'SELECT t.id, t.no_pesanan, t.nama_pelanggan, t.no_hp, t.tanggal_masuk,
+                   t.status, t.total_harga, s.nama_layanan
+            FROM transactions t
+            JOIN services s ON s.id = t.service_id
+            WHERE ' . sql_hp_kanonik('t.no_hp') . ' = ?
+            ORDER BY t.tanggal_masuk DESC, t.id DESC';
+
+    $stmt = $db->prepare($sql);
+    if (!$stmt) {
+        return [];
+    }
+    $stmt->bind_param('s', $kanon);
+    $stmt->execute();
+    $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+    return $rows;
+}
+
+/**
+ * Jumlah pesanan walk-in per status untuk pelanggan (ringkasan kartu statistik).
+ */
+function transaksi_pelanggan_ringkas(mysqli $db, string $no_hp): array
+{
+    $kanon = hp_kanonik($no_hp);
+    $out   = ['total' => 0, 'berjalan' => 0, 'selesai' => 0, 'belanja' => 0];
+    if ($kanon === '') {
+        return $out;
+    }
+
+    $sql = 'SELECT t.status, COUNT(*) AS n, COALESCE(SUM(t.total_harga),0) AS nilai
+            FROM transactions t
+            WHERE ' . sql_hp_kanonik('t.no_hp') . ' = ?
+            GROUP BY t.status';
+
+    $stmt = $db->prepare($sql);
+    if (!$stmt) {
+        return $out;
+    }
+    $stmt->bind_param('s', $kanon);
+    $stmt->execute();
+    $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    foreach ($rows as $r) {
+        $out['total'] += (int) $r['n'];
+        if ($r['status'] === 'Selesai' || $r['status'] === 'Diambil') {
+            $out['selesai'] += (int) $r['n'];
+            $out['belanja'] += (int) $r['nilai'];
+        } else {
+            $out['berjalan'] += (int) $r['n'];
+        }
+    }
+    return $out;
 }

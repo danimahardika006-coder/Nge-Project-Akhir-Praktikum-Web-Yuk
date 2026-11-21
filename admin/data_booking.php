@@ -9,6 +9,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id     = (int) ($_POST['booking_id'] ?? 0);
     $aksi   = $_POST['aksi'] ?? '';
 
+    // ---------- Tautkan pesanan kasir ke akun pelanggan ----------
+    // Dipakai dari halaman detail pelanggan. Pesanan walk-in tetap tanpa akun
+    // secara default; aksi ini hanya memperkuat tautan yang sudah ada.
+    if ($aksi === 'tautkan_kasir') {
+        $trx_id = (int) ($_POST['trx_id'] ?? 0);
+        $uid    = (int) ($_POST['user_id'] ?? 0);
+
+        $stmt = mysqli_prepare($koneksi, "SELECT id, no_pesanan, user_id FROM transactions WHERE id = ? LIMIT 1");
+        mysqli_stmt_bind_param($stmt, 'i', $trx_id);
+        mysqli_stmt_execute($stmt);
+        $trx = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+        mysqli_stmt_close($stmt);
+
+        $stmt = mysqli_prepare($koneksi, "SELECT id, nama_lengkap FROM users WHERE id = ? AND role = 'customer' LIMIT 1");
+        mysqli_stmt_bind_param($stmt, 'i', $uid);
+        mysqli_stmt_execute($stmt);
+        $cust = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+        mysqli_stmt_close($stmt);
+
+        if (!$trx) {
+            flash_set('Pesanan kasir tidak ditemukan.', 'danger');
+        } elseif (!$cust) {
+            flash_set('Akun pelanggan tidak ditemukan.', 'danger');
+        } elseif ((int) $trx['user_id'] === $uid) {
+            flash_set('Pesanan ' . $trx['no_pesanan'] . ' sudah tertaut ke akun ini.', 'info');
+        } else {
+            $upd = mysqli_prepare($koneksi, 'UPDATE transactions SET user_id = ? WHERE id = ?');
+            mysqli_stmt_bind_param($upd, 'ii', $uid, $trx_id);
+            mysqli_stmt_execute($upd);
+            mysqli_stmt_close($upd);
+            flash_set('Pesanan ' . $trx['no_pesanan'] . ' ditautkan ke akun ' . $cust['nama_lengkap'] . '.');
+        }
+
+        header('Location: pelanggan.php?id=' . $uid);
+        exit();
+    }
+
     // Pastikan booking ada
     $stmt = mysqli_prepare($koneksi, 'SELECT id, kode_booking, status FROM bookings WHERE id = ? LIMIT 1');
     mysqli_stmt_bind_param($stmt, 'i', $id);
@@ -107,6 +144,13 @@ while ($r = mysqli_fetch_assoc($res)) {
 }
 $total_booking = array_sum($ringkas);
 
+// Pendapatan booking: total booking yang sudah selesai
+$pendapatan_booking = 0;
+$q = mysqli_query($koneksi, "SELECT COALESCE(SUM(total_harga),0) AS total FROM bookings WHERE status = 'selesai'");
+if ($q) {
+    $pendapatan_booking = (int) mysqli_fetch_assoc($q)['total'];
+}
+
 $judul = 'Data Booking';
 $aktif = 'booking';
 require dirname(__DIR__) . '/partials/header_admin.php';
@@ -121,7 +165,7 @@ $filter_querystring = http_build_query(array_filter(['status' => $f_status, 'car
     </div>
 </div>
 
-<div class="stat-grid stat-grid-4">
+<div class="stat-grid stat-grid-5">
     <div class="stat">
         <div class="stat-label">Total booking</div>
         <div class="stat-value num"><?php echo (int) $total_booking; ?></div>
@@ -139,6 +183,11 @@ $filter_querystring = http_build_query(array_filter(['status' => $f_status, 'car
     <div class="stat">
         <div class="stat-label">Siap diambil</div>
         <div class="stat-value num"><?php echo (int) ($ringkas['siap_diambil'] ?? 0); ?></div>
+    </div>
+    <div class="stat">
+        <div class="stat-label">Pendapatan booking</div>
+        <div class="stat-value num"><?php echo e(rupiah($pendapatan_booking)); ?></div>
+        <div class="stat-note">Dari booking berstatus Selesai</div>
     </div>
 </div>
 
@@ -251,7 +300,9 @@ $filter_querystring = http_build_query(array_filter(['status' => $f_status, 'car
                         <label class="sr-only" for="st-<?php echo $id; ?>">Ubah status</label>
                         <select class="select select-sm" id="st-<?php echo $id; ?>" name="status">
                             <?php foreach (status_booking_semua() as $kode => $info): ?>
-                                <option value="<?php echo e($kode); ?>" <?php echo $kode === $b['status'] ? 'selected' : ''; ?>><?php echo e($info['label']); ?></option>
+                                <option value="<?php echo e($kode); ?>"
+                                        data-mundur="<?php echo status_mundur($b['status'], $kode) ? '1' : '0'; ?>"
+                                        <?php echo $kode === $b['status'] ? 'selected' : ''; ?>><?php echo e($info['label']); ?><?php echo status_mundur($b['status'], $kode) ? ' ↩' : ''; ?></option>
                             <?php endforeach; ?>
                         </select>
                         <input class="input input-sm" type="text" name="catatan" placeholder="Catatan status (opsional)" maxlength="255">
@@ -281,3 +332,17 @@ $filter_querystring = http_build_query(array_filter(['status' => $f_status, 'car
 </section>
 
 <?php require dirname(__DIR__) . '/partials/footer_customer.php'; ?>
+
+<script>
+// Konfirmasi hanya muncul kalau status dipilih mundur (ditandai ↩ di daftar).
+document.querySelectorAll('select[name="status"]').forEach(function (sel) {
+    sel.form.addEventListener('submit', function (ev) {
+        var opt = sel.options[sel.selectedIndex];
+        if (opt && opt.getAttribute('data-mundur') === '1') {
+            if (!confirm('Mundurkan status ke "' + opt.text.replace(' ↩', '') + '"?')) {
+                ev.preventDefault();
+            }
+        }
+    });
+});
+</script>

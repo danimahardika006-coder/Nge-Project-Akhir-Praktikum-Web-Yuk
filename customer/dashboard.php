@@ -26,6 +26,10 @@ mysqli_stmt_close($stmt);
 $selesai = (int) $selesai_row['n'];
 $belanja = (int) $selesai_row['belanja'];
 
+// ---------- Pesanan kasir (walk-in) yang tercatat dengan nomor HP akun ----------
+$kasir         = transaksi_pelanggan($koneksi, (string) ($user['no_hp'] ?? ''));
+$kasir_ringkas = transaksi_pelanggan_ringkas($koneksi, (string) ($user['no_hp'] ?? ''));
+
 // ---------- Booking terbaru ----------
 $stmt = mysqli_prepare(
     $koneksi,
@@ -67,22 +71,22 @@ require dirname(__DIR__) . '/partials/header_customer.php';
     <div class="stat">
         <div class="stat-label">Total booking</div>
         <div class="stat-value num"><?php echo (int) $total_booking; ?></div>
-        <div class="stat-note">Semua booking yang pernah dibuat</div>
+        <div class="stat-note">Booking online yang pernah dibuat</div>
     </div>
     <div class="stat">
         <div class="stat-label">Sedang berjalan</div>
         <div class="stat-value num"><?php echo (int) $berjalan; ?></div>
-        <div class="stat-note">Belum selesai / belum diambil</div>
+        <div class="stat-note">Booking yang belum selesai</div>
     </div>
     <div class="stat">
-        <div class="stat-label">Selesai</div>
-        <div class="stat-value num"><?php echo (int) $selesai; ?></div>
-        <div class="stat-note">Pesanan yang sudah tuntas</div>
+        <div class="stat-label">Pesanan outlet</div>
+        <div class="stat-value num"><?php echo (int) $kasir_ringkas['total']; ?></div>
+        <div class="stat-note">Dicocokkan dari nomor HP akun</div>
     </div>
     <div class="stat">
         <div class="stat-label">Total belanja</div>
         <div class="stat-value num"><?php echo e(rupiah($belanja)); ?></div>
-        <div class="stat-note">Dari booking berstatus selesai</div>
+        <div class="stat-note">Booking online berstatus selesai</div>
     </div>
 </div>
 
@@ -92,7 +96,7 @@ require dirname(__DIR__) . '/partials/header_customer.php';
         <div class="panel-head panel-head-row">
             <div>
                 <h2 class="panel-title" id="judul-riwayat">Riwayat terakhir</h2>
-                <p class="panel-sub">5 booking terbaru.</p>
+                <p class="panel-sub">5 booking online terbaru.</p>
             </div>
             <a class="link-more" href="<?php echo e(url('customer/riwayat.php')); ?>">Lihat semua</a>
         </div>
@@ -145,7 +149,6 @@ require dirname(__DIR__) . '/partials/header_customer.php';
             <h2 class="panel-title" id="judul-terbaru">Booking terbaru</h2>
             <p class="panel-sub">Status diperbarui admin secara langsung.</p>
         </div>
-
         <?php if ($terbaru): ?>
         <div class="panel-body">
             <div class="latest-top">
@@ -174,5 +177,56 @@ require dirname(__DIR__) . '/partials/header_customer.php';
     </aside>
 
 </div>
+
+<?php if ($user['no_hp'] !== null && $user['no_hp'] !== ''): ?>
+<section class="panel" style="margin-top:var(--s5)" aria-labelledby="judul-kasir">
+    <div class="panel-head panel-head-row">
+        <div>
+            <h2 class="panel-title" id="judul-kasir">Pesanan langsung di outlet</h2>
+            <p class="panel-sub">
+                Pesanan yang dicatat kasir memakai nomor HP
+                <strong class="num"><?php echo e($user['no_hp']); ?></strong> — total <?php echo (int) $kasir_ringkas['total']; ?> pesanan.
+            </p>
+        </div>
+        <?php if ($kasir): ?>
+            <a class="link-more" href="<?php echo e(url('customer/riwayat.php')); ?>">Lihat semua riwayat</a>
+        <?php endif; ?>
+    </div>
+
+    <?php if (!$kasir): ?>
+        <div class="empty">
+            <strong>Belum ada pesanan outlet</strong>
+            Saat kamu datang langsung dan kasir mencatat nomor HP ini, pesanannya otomatis muncul di sini.
+        </div>
+    <?php else: ?>
+    <div class="table-wrap">
+        <table class="orders">
+            <thead>
+                <tr>
+                    <th scope="col">Pesanan</th>
+                    <th scope="col">Layanan</th>
+                    <th scope="col">Tanggal masuk</th>
+                    <th scope="col" class="col-money">Total</th>
+                    <th scope="col">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach (array_slice($kasir, 0, 5) as $t): ?>
+                <tr>
+                    <td><span class="tag num"><?php echo e($t['no_pesanan']); ?></span></td>
+                    <td data-label="Layanan"><?php echo e($t['nama_layanan']); ?></td>
+                    <td data-label="Tanggal masuk"><?php echo e(tanggal_id($t['tanggal_masuk'])); ?></td>
+                    <td class="col-money num" data-label="Total"><?php echo e(rupiah($t['total_harga'])); ?></td>
+                    <td data-label="Status">
+                        <span class="badge" data-warna="<?php echo e(status_kasir_warna($t['status'])); ?>"><?php echo e($t['status']); ?></span>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php endif; ?>
+</section>
+<?php endif; ?>
 
 <?php require dirname(__DIR__) . '/partials/footer_customer.php'; ?>

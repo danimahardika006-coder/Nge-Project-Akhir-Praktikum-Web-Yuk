@@ -13,11 +13,12 @@ Dokumen ini menjelaskan **cara kerja kode di proyek ini**, konsep di baliknya, d
 5. [Sistem Autentikasi & Role](#5-sistem-autentikasi--role)
 6. [Sistem Booking — Kasus Terpenting](#6-sistem-booking--kasus-terpenting)
 7. [Sistem Status & Riwayat](#7-sistem-status--riwayat)
-8. [Migrasi Database Idempotent](#8-migrasi-database-idempotent)
-9. [Desain UI & CSS](#9-desain-ui--css)
-10. [Testing E2E](#10-testing-e2e)
-11. [Keputusan Desain: Kenapa Dibuat Begini](#11-keputusan-desain-kenapa-dibuat-begitu)
-12. [Ide Pengembangan Lanjutan](#12-ide-pengembangan-lanjutan)
+8. [Pesanan Outlet Tertaut ke Akun](#7b-pesanan-outlet-tertaut-ke-akun--normalisasi-nomor-hp)
+9. [Migrasi Database Idempotent](#8-migrasi-database-idempotent)
+10. [Desain UI & CSS](#9-desain-ui--css)
+11. [Testing E2E](#10-testing-e2e)
+12. [Keputusan Desain: Kenapa Dibuat Begini](#11-keputusan-desain-kenapa-dibuat-begitu)
+13. [Ide Pengembangan Lanjutan](#12-ide-pengembangan-lanjutan)
 
 ---
 
@@ -128,6 +129,9 @@ Semua format tampilan dikumpulkan jadi fungsi kecil:
 | `tanggal_panjang(...)` | `20 November 2026` |
 | `tanggal_waktu_id(...)` | `20 Nov 2026 · 14:30` |
 | `samarkan_hp('081234567890')` | `0812••••890` (untuk halaman publik) |
+| `hp_kanonik('+62 812-3456-7890')` | `081234567890` (untuk pencocokan) |
+
+Selain format, `init.php` juga menampung helper lintas-fitur: `status_posisi()`, `status_mundur()`, `hp_kanonik()`, `sql_hp_kanonik()`, `transaksi_pelanggan()`, `transaksi_pelanggan_ringkas()`. Prinsipnya: **kalau dipakai lebih dari satu halaman, tempatnya di sini** — bukan disalin ke tiap file, karena salinan pasti akan menyimpang seiring waktu.
 
 `e()` dibungkus `function_exists()` supaya file lama (tracking.php, dashboard.php) yang sudah punya fungsi sendiri tidak fatal-error saat include init.php.
 
@@ -142,6 +146,15 @@ Semua format tampilan dikumpulkan jadi fungsi kecil:
 ```
 
 Satu sumber kebenaran untuk: label, pesan pelanggan, urutan timeline, warna badge, dan pengecekan validitas (`status_valid()`). Menambah status baru = edit satu array ini saja.
+
+Tiga fungsi turunan yang bergantung pada urutan array ini:
+
+```php
+status_posisi('dicuci')        // 3 — indeks dalam alur tahap; -1 kalau di luar alur
+status_mundur('siap_diambil', 'dicuci')  // true — perpindahan menunduk
+```
+
+`status_mundur()` dipakai **hanya untuk UI**, bukan untuk melarang: dropdown status menandai opsi mundur dengan `↩` + atribut `data-mundur="1"`, lalu beberapa baris JS memunculkan `confirm()` saat form disubmit. Sengaja tidak memblokir di server — admin memang boleh salah klik dan membetulkannya sendiri.
 
 ### 3e. CSRF
 
@@ -361,11 +374,62 @@ Kenapa bukan cuma history? Karena 90% kebutuhan cuma butuh posisi terkini — jo
 
 Urutan tahap berasal dari urutan array di `status_booking_semua()`. Posisi sekarang = `array_search($status, status_tahap())`. Persentase progres = `(posisi / 6) * 100`.
 
+### Memundurkan status — kenapa dibolehkan?
+
+Kasus nyata: admin salah menandai "Siap Diambil" padahal sepatu masih dicuci. Kalau status cuma bisa maju, tidak ada jalan keluar. Maka:
+
+1. **Server menerima status apa pun yang valid** — mundur atau maju, sama-sama `UPDATE bookings SET status=...` + `catat_status(...)`.
+2. **UI memberi peringatan, bukan larangan** — opsi mundur diberi `↩` + dialog konfirmasi (lihat bagian 3d).
+3. **History append-only membuat mundur itu aman** — memundurkan status tidak menghapus jejak perjalanan; ia cuma menambah baris baru. Perjalanan lengkap tetap terbaca dari history.
+
+---
+
+## 7b. Pesanan Outlet Tertaut ke Akun — Normalisasi Nomor HP
+
+Masalah yang diselesaikan: pelanggan punya akun, tapi kasir mencatat pesanan walk-in **tanpa akun** — cuma nama + nomor HP di nota. Pesanan itu harus tetap muncul di riwayat pelanggan.
+
+Solusinya: cocokkan **nomor HP dalam bentuk kanonik**.
+
+```php
+function hp_kanonik($hp): string {
+    return normalisasi_hp(preg_replace('/\D+/', '', (string) $hp));
+    // "+62 812-3456-7890" → "081234567890"
+}
+```
+
+Tapi `081234567890` di DB bisa tersimpan sebagai `0812-3456-789` — tidak bisa dibandingkan langsung di SQL. Maka sisi SQL juga dinormalisasi dengan `REPLACE` berantai:
+
+```php
+function sql_hp_kanonik(string $kolom): string {
+    return "REPLACE(REPLACE(REPLACE(REPLACE($kolom,' ',''),'-',''),'+',''),'.','')";
+}
+
+// pemakaian:
+WHERE sql_hp_kanonik(t.no_hp) = ?   // ← ? diisi hp_kanonik($no_hp_akun)
+```
+
+Alur lengkapnya:
+
+```
+Nota kasir: no_hp = "0812-3456-789"
+                        │ REPLACE semua non-digit + normalisasi 62→0
+Akun:      no_hp = "08123456789"  ──┘
+                        = sama → pesanan tampil di riwayat pelanggan
+```
+
+Kenapa bukan `user_id` saja? Karena kasir **tidak akan mengubah cara kerjanya** — ia mencatat pesanan tanpa akun, seperti selama ini. Pencocokan nomor HP membuat link terjadi otomatis. `transactions.user_id` (kolom baru, nullable, `ON DELETE SET NULL`) ada sebagai **jalur manual**: admin bisa menautkan nota tertentu lewat tombol "Tautkan" untuk kasus nomor beda/typo. Dua jalur bisa aktif bersamaan; halaman riwayat menggabungkan keduanya.
+
+**Sisi keamanan:** pencocokan pakai `=` terhadap bentuk kanonik, bukan `LIKE '%...%'`. Nomor yang mirip tapi berbeda tidak akan cocok — pesanan orang lain tidak bocor.
+
 ---
 
 ## 8. Migrasi Database Idempotent
 
 `database/migrate.php` bisa dijalankan **berulang kali tanpa merusak apa-apa**. Tiga teknik yang dipakai:
+
+### Teknik 0 — kolom baru yang aman dijalankan ulang
+
+Kolom `transactions.user_id` ditambahkan dengan cek `kolom_ada()` yang sama seperti `users.role`. Bedanya, FK-nya sengaja `ON DELETE SET NULL`: kalau akun pelanggan dihapus, nota kasirnya **tetap ada** — cuma kehilangan tautan manualnya (pencocokan nomor HP tetap bisa menemukannya lagi).
 
 ### Teknik 1 — cek sebelum buat
 
@@ -418,7 +482,7 @@ Data tanpa riwayat boleh hilang; data dengan riwayat cukup disembunyikan dari fo
 
 ## 9. Desain UI & CSS
 
-Satu file `assets/style.css` (~1.300 baris) memuat semuanya, dengan **custom properties** sebagai design tokens:
+Satu file `assets/style.css` (~1.355 baris) memuat semuanya, dengan **custom properties** sebagai design tokens:
 
 ```css
 :root {
@@ -459,6 +523,19 @@ Cakupan (9 kelompok): registrasi + validasi → login & proteksi halaman → boo
 
 Kelompok paling berharga adalah **pengujian serangan**: harga dimanipulasi lewat POST dan diharapkan diabaikan, booking orang lain diakses dan diharapkan 404, form tanpa CSRF diharapkan 419. Tes keamanan yang tidak pernah dijalankan = tidak ada.
 
+### Yang diuji manual (tidak masuk suite)
+
+Beberapa perilaku lebih mudah diperiksa langsung lewat HTTP + query DB:
+
+| Yang diperiksa | Bukti yang dicari |
+|---|---|
+| Tiga format nomor HP (`08123456789`, `0812-3456-789`, `+62 812 3456 789`) | Ketiganya cocok ke satu akun yang sama |
+| Nota milik nomor HP lain | Tidak muncul di riwayat (tidak bocor) |
+| Pelanggan tanpa `no_hp` | Halaman tetap 200 + teks ajakan melengkapi profil, bukan error |
+| Total belanja gabungan | 3 booking selesai + 2 nota kasir selesai = satu angka benar |
+| Mundurkan status | 302 + baris baru di `order_status_history` |
+| POST tanpa CSRF | 419 |
+
 ---
 
 ## 11. Keputusan Desain: Kenapa Dibuat Begini
@@ -475,6 +552,10 @@ Kelompok paling berharga adalah **pengujian serangan**: harga dimanipulasi lewat
 | Guard baca ulang user dari DB tiap request | Percaya isi session | Nonaktif akun berlaku seketika |
 | Pesan error login seragam | Pesan spesifik per kesalahan | Mencegah user enumeration |
 | PHP murni tanpa framework | Laravel/CodeIgniter | Melanjutkan kode existing; kompleksitas proyek tidak butuh framework |
+| Pesanan outlet dicocokkan lewat nomor HP (kanonik), `user_id` hanya opsional | Wajib isi `user_id` saat kasir input | Kasir tidak berubah cara kerja; pencocokan otomatis menangani 99% kasus |
+| `transactions.user_id` → `ON DELETE SET NULL` | `CASCADE` | Menghapus akun tidak boleh menghapus nota kasir; tautan bisa dibangun ulang dari nomor HP |
+| Status mundur dibolehkan + konfirmasi UI | Memblokir di server | Admin bisa salah klik; riwayat append-only membuat mundur tetap tercatat jujur |
+| Pendapatan kasir & booking dipisah per halaman | Satu angka gabungan di kasir | Sumbernya beda tabel (`transactions` vs `bookings`); pendapatan booking tampil di halaman Data Booking tempat admin mengerjakannya |
 
 ---
 

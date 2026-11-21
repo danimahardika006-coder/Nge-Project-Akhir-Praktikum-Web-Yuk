@@ -1,6 +1,6 @@
 # Cuci Sepatu — Sistem Booking & Kasir
 
-Aplikasi web cuci sepatu dengan dua sisi: **panel kasir** untuk pesanan walk-in dan **sistem booking online** dengan akun pelanggan, riwayat cucian, dan pelacakan status. Dibangun dengan PHP murni + MySQL/MariaDB tanpa framework.
+Aplikasi web cuci sepatu dengan dua sisi: **panel kasir** untuk pesanan walk-in (fitur lama) dan **sistem booking online** dengan akun pelanggan, riwayat cucian, dan pelacakan status (fitur baru). Dibangun dengan PHP murni + MySQL/MariaDB tanpa framework.
 
 ---
 
@@ -25,8 +25,8 @@ Aplikasi web cuci sepatu dengan dua sisi: **panel kasir** untuk pesanan walk-in 
 | Sisi | Fitur |
 |---|---|
 | **Publik** | Lacak pesanan kasir (`TRX-…`) & booking online (`BK-…`) |
-| **Pelanggan** | Registrasi, login, dashboard, booking online dengan slot waktu, riwayat cucian, detail booking + timeline 7 tahap, batalkan booking, edit profil, ganti password |
-| **Admin** | Panel kasir walk-in (lama), kelola booking online (konfirmasi/tolak/update status + catatan), kelola akun pelanggan (aktif/nonaktif), kelola layanan/paket/tipe sepatu (tambah/edit/**hapus cerdas**), template layanan otomatis |
+| **Pelanggan** | Registrasi, login, dashboard, booking online dengan slot waktu, riwayat cucian **gabungan (booking online + pesanan outlet)**, detail booking + timeline 7 tahap, batalkan booking, edit profil, ganti password |
+| **Admin** | Panel kasir walk-in (lama), kelola booking online (konfirmasi/tolak/**update status termasuk mundur** + catatan), kelola akun pelanggan (aktif/nonaktif, **lihat pesanan outlet pelanggan**), kelola layanan/paket/tipe sepatu (tambah/edit/**hapus cerdas**), template layanan otomatis, **pendapatan terpisah (kasir vs booking)** |
 
 ## Alur Lengkap Pemakaian
 
@@ -63,7 +63,8 @@ PELANGGAN                                ADMIN
 - Satu halaman login untuk semua — admin diarahkan ke panel kasir, pelanggan ke dashboard-nya.
 
 ### Dashboard (`customer/dashboard.php`)
-- 4 kartu statistik: **Total booking · Sedang berjalan · Selesai · Total belanja**.
+- 4 kartu statistik: **Total booking · Sedang berjalan · Selesai · Total belanja**, plus kartu **Pesanan outlet** bila nomor HP akun punya nota kasir yang cocok.
+- Panel "Pesanan outlet terbaru" menampilkan nota walk-in yang tertaut — tersembunyi otomatis kalau nomor HP belum diisi atau belum ada nota.
 - Kartu booking terbaru dengan ringkasan detail + tombol aksi cepat.
 - Tabel 5 booking terakhir, semua data diambil langsung dari database.
 
@@ -76,9 +77,31 @@ PELANGGAN                                ADMIN
 - Nomor booking unik otomatis: format `BK-YYYYMMDD-XXXX`.
 
 ### Riwayat & Detail Booking
-- **Riwayat** (`customer/riwayat.php`): semua booking milik sendiri dengan filter per status.
+- **Riwayat** (`customer/riwayat.php`): semua cucian milik sendiri, dari **dua sumber**:
+  - **Booking online** — pesanan yang dibuat lewat halaman booking
+  - **Pesanan outlet** — pesanan walk-in yang dicatat kasir dengan **nomor HP yang sama** dengan nomor HP akun
+- **Total belanja** dihitung dari **kedua sumber** yang sudah selesai (booking `selesai` + outlet `Selesai/Diambil`).
+- Filter per status + pencarian berlaku untuk kedua jenis.
 - **Detail** (`customer/detail_booking.php`): timeline visual 7 tahap, detail pesanan + harga, riwayat lengkap perubahan status lengkap dengan catatan admin dan waktu.
 - Pelanggan hanya bisa melihat booking miliknya sendiri (percobaan akses booking orang lain → 404).
+
+### Pesanan Outlet Otomatis Muncul di Akun
+Pelanggan yang **langsung datang ke outlet** (tanpa booking online) tetap bisa melihat riwayatnya:
+
+```
+Kasir catat: nama Budi · HP 0812-3456-7890 → TRX-20261120-101
+                        │
+                        │  dicocokkan otomatis
+                        ▼
+Akun Budi (no_hp: 081234567890)
+   └─ Riwayat → bagian "Pesanan langsung di outlet"
+```
+
+- Pencocokan memakai **bentuk kanonik** nomor HP, jadi format apa pun diterima:
+  `081234567890` = `0812-3456-7890` = `+62 812 3456 7890`
+- Kasir **tidak perlu mengubah cara kerjanya** — cukup tulis nomor HP pelanggan seperti biasa.
+- Kalau nomor HP pelanggan belum diisi di profil, bagian ini menampilkan ajakan melengkapi profil (bukan error).
+- Admin bisa **menautkan manual** pesanan tertentu ke akun (tombol "Tautkan" di detail pelanggan) untuk kasus nomor beda/typo.
 
 ### Batalkan Booking
 - Bisa dibatalkan sendiri **selama masih "Menunggu Konfirmasi"**.
@@ -94,24 +117,27 @@ Semua halaman admin diawasi: hanya akun ber-role `admin` yang bisa masuk, pelang
 
 ### Panel Kasir (`dashboard.php`) — fitur lama, tetap utuh
 - Catat pesanan walk-in tanpa akun, update status (Antrean/Dicuci/Selesai/Diambil), hapus pesanan.
-- Sekarang dilengkapi navigasi baru ke halaman-halaman booking.
+- Kartu pendapatan **kasir**: total walk-in Selesai/Diambil. Pendapatan booking online tampil terpisah di halaman Data Booking.
+- Dilengkapi navigasi ke halaman-halaman booking.
 
 ### Data Booking (`admin/data_booking.php`)
 - Semua booking online dalam kartu, **booking menunggu konfirmasi muncul paling atas**.
 - Filter per status + pencarian (kode booking / nama / email / HP).
-- Aksi: **Konfirmasi**, **Tolak** (wajib alasan), **Update status**, **Simpan catatan**.
+- Aksi: **Konfirmasi**, **Tolak** (wajib alasan), **Update status** (dropdown inline, opsi mundur ditandai `↩`), **Simpan catatan**.
+- Statistik di atas halaman termasuk **Pendapatan booking** — total booking berstatus selesai (angka ini tidak ada di panel kasir).
 - Badge jumlah booking yang menunggu konfirmasi tampil di navigasi.
 - Statistik per status di atas halaman.
 
 ### Detail Booking (`admin/detail_booking.php`)
 - Data lengkap: pelanggan (nama, email, HP), layanan/paket, harga per komponen, jadwal, catatan.
-- Update status + catatan per perubahan.
-- Riwayat lengkap: siapa mengubah apa dan kapan.
+- Update status + catatan per perubahan — **termasuk memundurkan status** bila salah klik (pilihan yang mundur ditandai `↩` + konfirmasi sebelum disimpan).
+- Riwayat lengkap: siapa mengubah apa dan kapan. Memundurkan status tetap tercatat sebagai baris baru.
 
 ### Data Pelanggan (`admin/data_pelanggan.php` + `admin/pelanggan.php`)
 - Daftar semua akun + jumlah booking per orang.
 - **Aktifkan / nonaktifkan akun** — akun nonaktif tidak bisa login.
-- Profil per pelanggan + seluruh riwayat bookingnya.
+- Profil per pelanggan + seluruh riwayat booking online, **plus pesanan outlet** yang tertaut lewat nomor HP.
+- Tombol **Tautkan** untuk mengaitkan pesanan kasir tertentu ke akun secara eksplisit.
 
 ### Layanan, Paket & Tipe Sepatu (`admin/data_layanan.php`)
 - **Layanan**: tambah, edit nama/harga/status aktif, **hapus**.
@@ -133,6 +159,7 @@ Menunggu Konfirmasi → Dikonfirmasi → Sepatu Diterima → Sedang Dicuci
 
 - Pelanggan melihat sebagai **timeline horizontal** dengan penanda posisi sekarang + persentase progres.
 - Setiap perubahan dicatat permanen di tabel `order_status_history` (status, catatan, admin pelaku, waktu) — tidak ada yang bisa diubah balik tanpa jejak.
+- **Status boleh dimundurkan.** Admin kadang salah klik (misal menandai "Siap Diambil" padahal belum). Pilihan yang memundurkan ditandai `↩` di dropdown dan memunculkan konfirmasi sebelum disimpan. Karena riwayat bersifat append-only, memundurkan status tidak menghapus jejak — ia menambah baris baru.
 
 ## Instalasi
 
@@ -157,8 +184,9 @@ Menunggu Konfirmasi → Dikonfirmasi → Sepatu Diterima → Sedang Dicuci
    Migrasi akan:
    - Membuat tabel baru: `pakets`, `tipe_sepatu`, `bookings`, `order_status_history`.
    - Menambah kolom `role`, `no_hp`, `status_akun` ke tabel `users` yang sudah ada — **semua akun lama otomatis menjadi admin**.
+   - Menambah kolom `transactions.user_id` (nullable, `ON DELETE SET NULL`) untuk menautkan nota kasir ke akun pelanggan.
    - Mengisi **template awal**: 5 layanan, 5 paket, 8 tipe sepatu (hanya bila tabel masih kosong).
-   - Tidak menghapus / mengubah data apa pun yang sudah ada.
+   - Tidak menghapus / mengubah data apa pun yang sudah ada. Jalankan berapa kali pun hasilnya sama.
 
 5. **Buat akun admin pertama** — bila database masih kosong, daftar lewat `registrasi.php` lalu ubah role-nya:
    ```sql
@@ -175,7 +203,7 @@ Menunggu Konfirmasi → Dikonfirmasi → Sepatu Diterima → Sedang Dicuci
 | `registrasi.php` | Kini untuk pendaftaran pelanggan (dengan no. HP) |
 | `dashboard.php` | Ditambah navigasi baru & CSRF (perilaku kasir tidak berubah) |
 | `tracking.php` | Sekarang juga mengenali kode `BK-…` |
-| `koneksi.php` | Tambah dukungan `DB_PORT` (default tetap 3306) |
+| `koneksi.php` | Tambah dukungan `DB_PORT` (default tetap 3306) + koneksi dipaksa ke TCP `127.0.0.1` |
 
 ## Struktur Database
 
@@ -185,7 +213,8 @@ users ──┬──< bookings >──┬── services
         │        │
         │        └──< order_status_history >── users (admin pelaku)
         │
-        └── transactions (walk-in, struktur lama, tidak diubah)
+        └──< transactions   (walk-in; terhubung OPSIONAL lewat user_id
+                             atau dicocokkan dari nomor HP)
 ```
 
 | Tabel | Isi | Catatan penting |
@@ -196,7 +225,11 @@ users ──┬──< bookings >──┬── services
 | `tipe_sepatu` | Jenis sepatu untuk dropdown | Disimpan sebagai teks di booking |
 | `bookings` | Pesanan online | Menyimpan **snapshot harga** — riwayat tidak berubah meski harga layanan dinaikkan |
 | `order_status_history` | Jejak setiap perubahan status | Append-only; sumber timeline |
-| `transactions` | Pesanan kasir walk-in (lama) | **Tidak disentuh sama sekali** |
+| `transactions` | Pesanan kasir walk-in | Punya `user_id` **opsional** (`ON DELETE SET NULL`) untuk tautan eksplisit ke akun; pencocokan utama tetap lewat nomor HP |
+
+**Tautan transaksi ke akun** — dua jalur, keduanya boleh aktif bersamaan:
+1. **Otomatis** — nomor HP pada nota kasir sama dengan nomor HP di profil akun (setelah dinormalisasi).
+2. **Manual** — admin klik "Tautkan" di halaman detail pelanggan → `transactions.user_id` diisi.
 
 Skema referensi lengkap: [`database/schema.sql`](database/schema.sql).
 
@@ -233,13 +266,29 @@ Skema referensi lengkap: [`database/schema.sql`](database/schema.sql).
 │
 ├── database/
 │   ├── migrate.php          ← migrasi idempotent (jalankan sekali)
-│   └── schema.sql           ← skema referensi
+│   ├── schema.sql           ← skema referensi
+│   ├── generate_erd.py      ← gambar ERD gaya tabel (baca information_schema)
+│   └── generate_erd_chen.py ← gambar ERD notasi Chen
+│
+├── docs/
+│   ├── erd.png              ← ERD gaya database/Workbench
+│   └── erd-chen.png         ← ERD notasi Chen (kotak/elips/belah ketupat)
 │
 ├── tests/
 │   └── e2e.php              ← 74 tes otomatis end-to-end
 │
 └── assets/
     └── style.css            ← seluruh desain (satu file)
+```
+
+### Membuat ulang gambar ERD
+
+Kedua skrip membaca **database yang sedang jalan** (bukan skema hardcoded), jadi gambar selalu sesuai kondisi nyata:
+
+```bash
+python3 -m pip install --user Pillow     # sekali saja
+python3 database/generate_erd.py         # → docs/erd.png
+python3 database/generate_erd_chen.py    # → docs/erd-chen.png
 ```
 
 ## Keamanan
@@ -256,10 +305,22 @@ Skema referensi lengkap: [`database/schema.sql`](database/schema.sql).
 | **Hak akses** | Guard `butuh_admin()` / `butuh_customer()` di awal setiap halaman |
 | **Manipulasi harga** | Harga total dihitung ulang di server dari database — nilai dari form diabaikan |
 | **Akun nonaktif** | Tidak bisa login; sesi aktif langsung dianggap invalid |
+| **Isolasi pesanan outlet** | Pencocokan nomor HP memakai bentuk kanonik (`hp_kanonik()`), bukan `LIKE`, sehingga nomor mirip tidak bisa membaca pesanan orang lain |
+| **Tautan manual** | `transactions.user_id` hanya bisa diisi admin lewat form ber-CSRF; tanpa token → 419 |
 
 ## Pengujian
 
 74 tes end-to-end otomatis mencakup: registrasi + validasi, login & proteksi halaman, booking + perhitungan harga + slot, isolasi antar-akun (IDOR), alur admin lengkap, profil & ganti password, nonaktif akun, dan fitur lama tetap jalan.
+
+Di luar suite itu, beberapa perilaku diuji manual lewat HTTP:
+
+| Yang diuji | Hasil yang diharapkan |
+|---|---|
+| Riwayat pelanggan dengan 3 format nomor HP berbeda (`08123456789`, `0812-3456-789`, `+62 812 3456 789`) | Ketiganya cocok ke akun yang sama |
+| Pesanan milik nomor HP lain | Tidak muncul sama sekali (tidak bocor) |
+| Total belanja: 3 booking selesai (Rp 170.000) + 2 nota kasir selesai (Rp 65.000) | Tampil Rp 235.000 |
+| Status dimundurkan (`siap_diambil → dicuci`, `selesai → menunggu_konfirmasi`) | Tersimpan (302) + tercatat sebagai baris riwayat baru |
+| POST ubah status tanpa token CSRF | HTTP 419 |
 
 ```bash
 # 1. Jalankan server dev (atau pakai Apache XAMPP biasa)
@@ -282,5 +343,10 @@ Output diakhiri dengan rekap `LULUS: N  GAGAL: N`.
 | Mau ganti kapasitas slot per jam | Ubah `KAPASITAS_SLOT` di `partials/init.php` (baris `define('KAPASITAS_SLOT', 3)`) |
 | Mau ganti jam operasional | Ubah daftar jam di fungsi `slot_jam()` di `partials/init.php` |
 | Mau tambah layanan template bawaan | Tambah baris di array `$template_layanan` di `database/migrate.php`, lalu jalankan ulang migrasi |
+| Pesanan outlet tidak muncul di akun pelanggan | Nomor HP di nota kasir harus sama dengan `no_hp` di profil akun (setelah dinormalisasi). Kalau beda/typo, admin bisa klik **Tautkan** di halaman detail pelanggan |
+| Total belanja terasa kurang | Hanya pesanan **selesai** yang dihitung: booking `selesai` + nota kasir `Selesai`/`Diambil` |
+| Pendapatan di dashboard tidak bertambah | Hanya nota kasir berstatus `Selesai`/`Diambil` yang dihitung. Pendapatan booking online ada di halaman **Data Booking** (kartu kelima) |
 
 ---
+
+*Panduan memahami kodenya ada di [`PANDUAN-KODE.md`](PANDUAN-KODE.md).*

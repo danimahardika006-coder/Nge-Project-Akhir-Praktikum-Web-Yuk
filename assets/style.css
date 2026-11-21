@@ -457,6 +457,12 @@ a:hover { color: var(--pine-deep); }
 .page-date { margin-top: var(--s1); color: var(--ink-3); font-size: 14px; }
 
 .revenue { text-align: right; }
+.revenue-group {
+    display: flex;
+    gap: var(--s5);
+    text-align: right;
+}
+.revenue-group .revenue { text-align: right; }
 .revenue-label { font-size: 13px; color: var(--ink-3); }
 .revenue-value {
     margin-top: 2px;
@@ -625,6 +631,7 @@ a:hover { color: var(--pine-deep); }
 
     .page { padding-top: var(--s5); }
     .page-head { flex-direction: column; align-items: stretch; gap: var(--s4); }
+    .revenue-group { gap: var(--s4); }
     .revenue { text-align: left; display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap; }
     .revenue-value { margin-top: 0; }
     .revenue-note { flex-basis: 100%; }
@@ -907,6 +914,7 @@ a:hover { color: var(--pine-deep); }
     gap: var(--s4);
     margin-bottom: var(--s5);
 }
+.stat-grid-5 { grid-template-columns: repeat(5, 1fr); }
 .stat {
     padding: var(--s4) var(--s5);
     border: 1px solid var(--line);
@@ -1264,7 +1272,7 @@ a.stage { text-decoration: none; color: inherit; }
 
 /* ---------- Responsif tambahan ---------- */
 @media (max-width: 1040px) {
-    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .stat-grid, .stat-grid-5 { grid-template-columns: repeat(2, 1fr); }
     .bc-grid { grid-template-columns: 1fr 1fr; }
     .mainnav { order: 3; flex-basis: 100%; justify-content: center; padding-bottom: var(--s2); }
     .topbar-inner { flex-wrap: wrap; padding-top: var(--s2); }
@@ -1297,3 +1305,52 @@ a.stage { text-decoration: none; color: inherit; }
 }
 .row-hapus form { margin: 0; }
 .col-action { width: 1%; white-space: nowrap; }
+
+/* ---------- Tab jenis riwayat (booking online / pesanan outlet) ---------- */
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    margin-bottom: var(--s4);
+}
+
+.tab {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink-2);
+    font: inherit;
+    font-size: 14px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.tab .num {
+    color: var(--ink-3);
+    margin-left: 4px;
+}
+
+.tab:hover { border-color: var(--pine); }
+
+.tab-aktif {
+    background: var(--pine);
+    border-color: var(--pine);
+    color: #fff;
+}
+
+.tab-aktif .num { color: rgba(255, 255, 255, 0.75); }
+
+.tab:focus-visible {
+    outline: 2px solid var(--pine);
+    outline-offset: 2px;
+}
+
+/* ---------- Catatan kecil di bawah panel ---------- */
+.panel-note {
+    margin: var(--s3) var(--s5) var(--s4);
+    font-size: 13px;
+    color: var(--ink-3);
+}
+

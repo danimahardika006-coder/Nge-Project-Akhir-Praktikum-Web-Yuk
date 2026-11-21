@@ -195,10 +195,12 @@ $hari_ini = $hari[(int) date('w')] . ', ' . tanggal_id(date('Y-m-d'));
             <p class="page-date"><?php echo e($hari_ini); ?></p>
             <a class="btn btn-primary jump" href="#form-pesanan">Catat pesanan baru</a>
         </div>
-        <div class="revenue">
-            <div class="revenue-label">Pendapatan</div>
-            <div class="revenue-value num"><?php echo e(rupiah($total_pendapatan)); ?></div>
-            <div class="revenue-note">Dari pesanan berstatus Selesai dan Diambil</div>
+        <div class="revenue-group">
+            <div class="revenue">
+                <div class="revenue-label">Pendapatan kasir</div>
+                <div class="revenue-value num"><?php echo e(rupiah($total_pendapatan)); ?></div>
+                <div class="revenue-note">Pesanan walk-in berstatus Selesai dan Diambil</div>
+            </div>
         </div>
     </div>
 
