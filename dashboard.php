@@ -315,21 +315,6 @@ $hari_ini = $hari[(int) date('w')] . ', ' . tanggal_id(date('Y-m-d'));
                 </div>
 
                 <div class="field">
-                    <label for="service_id">Layanan</label>
-                    <select class="select" id="service_id" name="service_id" required>
-                        <option value="">Pilih layanan</option>
-                        <?php foreach ($services_list as $svc): ?>
-                            <option value="<?php echo (int) $svc['id']; ?>"
-                                    data-harga="<?php echo e(rupiah($svc['harga'])); ?>"
-                                    <?php echo (int) $old['service_id'] === (int) $svc['id'] ? 'selected' : ''; ?>>
-                                <?php echo e($svc['nama_layanan']); ?> (<?php echo e(rupiah($svc['harga'])); ?>)
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                    <p class="field-hint" id="harga-info" aria-live="polite"></p>
-                </div>
-
-                <div class="field">
                     <label for="tanggal_masuk">Tanggal masuk</label>
                     <input class="input" type="date" id="tanggal_masuk" name="tanggal_masuk"
                            value="<?php echo e($old['tanggal_masuk']); ?>" required>
