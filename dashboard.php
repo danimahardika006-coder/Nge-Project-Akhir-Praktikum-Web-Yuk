@@ -29,6 +29,7 @@ $old = [
     'nama_pelanggan' => '',
     'no_hp'          => '',
     'service_id'     => 0,
+    'paket_id'       => 0,
     'tanggal_masuk'  => date('Y-m-d'),
 ];
 
@@ -38,12 +39,14 @@ if (isset($_POST['tambahTransaksi'])) {
     $nama_pelanggan = trim($_POST['nama_pelanggan']);
     $no_hp          = trim($_POST['no_hp']);
     $service_id     = intval($_POST['service_id']);
+    $paket_id       = intval($_POST['paket_id'] ?? 0);
     $tanggal_masuk  = trim($_POST['tanggal_masuk']);
 
     $old = [
         'nama_pelanggan' => $nama_pelanggan,
         'no_hp'          => $no_hp,
         'service_id'     => $service_id,
+        'paket_id'       => $paket_id,
         'tanggal_masuk'  => $tanggal_masuk,
     ];
 
@@ -55,23 +58,43 @@ if (isset($_POST['tambahTransaksi'])) {
         $result_harga = mysqli_stmt_get_result($stmt_harga);
 
         if ($row_harga = mysqli_fetch_assoc($result_harga)) {
-            $total_harga = $row_harga['harga'];
+            // Paket opsional: tambahan harga dihitung bila dipilih
+            $tambahan_paket = 0;
+            $paket_valid    = true;
+            if ($paket_id > 0) {
+                $stmt_paket = mysqli_prepare($koneksi, 'SELECT tambahan_harga FROM pakets WHERE id = ? AND aktif = 1');
+                mysqli_stmt_bind_param($stmt_paket, 'i', $paket_id);
+                mysqli_stmt_execute($stmt_paket);
+                $row_paket = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_paket));
+                if (!$row_paket) {
+                    $pesan = "Paket yang dipilih tidak tersedia. Pilih paket dari daftar.";
+                    $pesan_tipe = "danger";
+                    $paket_valid = false;
+                } else {
+                    $tambahan_paket = (int) $row_paket['tambahan_harga'];
+                }
+            }
 
-            // Nomor pesanan unik (contoh: TRX-20261115-412)
-            $no_pesanan = "TRX-" . date("Ymd") . "-" . rand(100, 999);
+            if ($paket_valid) {
+                $total_harga = (int) $row_harga['harga'] + $tambahan_paket;
 
-            $stmt_insert = mysqli_prepare(
-                $koneksi,
-                "INSERT INTO transactions (no_pesanan, nama_pelanggan, no_hp, service_id, tanggal_masuk, status, total_harga)
-                 VALUES (?, ?, ?, ?, ?, 'Antrean', ?)"
-            );
-            mysqli_stmt_bind_param($stmt_insert, "sssisi", $no_pesanan, $nama_pelanggan, $no_hp, $service_id, $tanggal_masuk, $total_harga);
+                // Nomor pesanan unik (contoh: TRX-20261115-412)
+                $no_pesanan = "TRX-" . date("Ymd") . "-" . rand(100, 999);
 
-            if (mysqli_stmt_execute($stmt_insert)) {
-                kembali_dengan_pesan("Pesanan dicatat dengan nomor", "success", $no_pesanan);
-            } else {
-                $pesan = "Pesanan belum tersimpan: " . mysqli_error($koneksi);
-                $pesan_tipe = "danger";
+                $stmt_insert = mysqli_prepare(
+                    $koneksi,
+                    "INSERT INTO transactions (no_pesanan, nama_pelanggan, no_hp, service_id, paket_id, tanggal_masuk, status, total_harga)
+                     VALUES (?, ?, ?, ?, ?, ?, 'Antrean', ?)"
+                );
+                $paket_insert = $paket_id > 0 ? $paket_id : null;
+                mysqli_stmt_bind_param($stmt_insert, "sssiisi", $no_pesanan, $nama_pelanggan, $no_hp, $service_id, $paket_insert, $tanggal_masuk, $total_harga);
+
+                if (mysqli_stmt_execute($stmt_insert)) {
+                    kembali_dengan_pesan("Pesanan dicatat dengan nomor", "success", $no_pesanan);
+                } else {
+                    $pesan = "Pesanan belum tersimpan: " . mysqli_error($koneksi);
+                    $pesan_tipe = "danger";
+                }
             }
         } else {
             $pesan = "Layanan yang dipilih tidak valid. Pilih layanan dari daftar.";
@@ -119,6 +142,12 @@ $services_query = mysqli_query($koneksi, "SELECT * FROM services ORDER BY harga 
 $services_list  = [];
 while ($s = mysqli_fetch_assoc($services_query)) {
     $services_list[] = $s;
+}
+
+$pakets = [];
+$pakets_query = mysqli_query($koneksi, "SELECT id, nama_paket, tambahan_harga FROM pakets WHERE aktif = 1 ORDER BY tambahan_harga ASC");
+while ($p = mysqli_fetch_assoc($pakets_query)) {
+    $pakets[] = $p;
 }
 
 // 6. Query ringkasan statistik
@@ -329,20 +358,22 @@ $hari_ini = $hari[(int) date('w')] . ', ' . tanggal_id(date('Y-m-d'));
                     <p class="field-hint" id="harga-info" aria-live="polite"></p>
                 </div>
 
-                <div class="field"> 
-                    <!-- yang perlu di edit zar -->
+                <div class="field">
                     <label for="paket_id">Paket</label>
                     <select class="select" id="paket_id" name="paket_id">
                         <option value="">Pilih Paket</option>
-                        <?php foreach ($pakets as $svc): ?>
-                            <option value="<?php echo (int) $svc['id']; ?>"
-                                    data-harga="<?php echo e(rupiah($svc['harga'])); ?>"
-                                    <?php echo (int) $old['paket_id'] === (int) $svc['id'] ? 'selected' : ''; ?>>
-                                <?php echo e($svc['nama_paket']); ?> (<?php echo e(rupiah($svc['harga'])); ?>)
+                        <?php foreach ($pakets as $p): ?>
+                            <option value="<?php echo (int) $p['id']; ?>"
+                                    data-harga="<?php echo (int) $p['tambahan_harga']; ?>"
+                                    <?php echo (int) $old['paket_id'] === (int) $p['id'] ? 'selected' : ''; ?>>
+                                <?php echo e($p['nama_paket']); ?>
+                                <?php if ((int) $p['tambahan_harga'] > 0): ?>
+                                    (+<?php echo e(rupiah($p['tambahan_harga'])); ?>)
+                                <?php endif; ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
-                    <p class="field-hint" id="harga-info" aria-live="polite"></p>
+                    <p class="field-hint" id="paket-info" aria-live="polite"></p>
                 </div>
 
                 <div class="field">
@@ -414,20 +445,41 @@ $hari_ini = $hari[(int) date('w')] . ', ' . tanggal_id(date('Y-m-d'));
     document.getElementById('dialog-batal').addEventListener('click', function () { dlg.close(); });
     dlg.addEventListener('click', function (ev) { if (ev.target === dlg) dlg.close(); });
 
-    // Tampilkan harga layanan yang dipilih
-    var svc  = document.getElementById('service_id');
-    var info = document.getElementById('harga-info');
+    // Tampilkan total harga live: harga layanan + tambahan paket
+    var svc   = document.getElementById('service_id');
+    var pkt   = document.getElementById('paket_id');
+    var info  = document.getElementById('harga-info');
+    var infoP = document.getElementById('paket-info');
+
+    function angka(el) {
+        if (!el) return 0;
+        var opt = el.options[el.selectedIndex];
+        var raw = opt ? (opt.getAttribute('data-harga') || '') : '';
+        var n = parseInt(raw.replace(/[^0-9]/g, ''), 10);
+        return isNaN(n) ? 0 : n;
+    }
+
+    function rupiahJS(n) {
+        return 'Rp ' + n.toLocaleString('id-ID');
+    }
+
     function tampilHarga() {
-        var opt = svc.options[svc.selectedIndex];
+        var total = angka(svc) + angka(pkt);
         info.innerHTML = '';
-        if (opt && opt.getAttribute('data-harga')) {
+        if (total > 0) {
             var s = document.createElement('strong');
-            s.textContent = opt.getAttribute('data-harga');
+            s.textContent = rupiahJS(total);
             info.appendChild(document.createTextNode('Total pesanan: '));
             info.appendChild(s);
         }
+        if (infoP) {
+            var tambahan = angka(pkt);
+            infoP.textContent = tambahan > 0 ? 'Tambahan paket: ' + rupiahJS(tambahan) : '';
+        }
     }
-    svc.addEventListener('change', tampilHarga);
+
+    if (svc) svc.addEventListener('change', tampilHarga);
+    if (pkt) pkt.addEventListener('change', tampilHarga);
     tampilHarga();
 })();
 </script>
