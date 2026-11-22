@@ -125,7 +125,7 @@ require dirname(__DIR__) . '/partials/header_admin.php';
             <?php foreach ($daftar as $u): ?>
                 <tr>
                     <td>
-                        <div class="cell-main"><a <?php echo (int) $u['id']; ?>"><?php echo e($u['nama_lengkap']); ?></a></div>
+                        <div class="cell-main"><a<?php echo (int) $u['id']; ?>><?php echo e($u['nama_lengkap']); ?></a></div>
                         <div class="cell-sub">@<?php echo e($u['username']); ?></div>
                     </td>
                     <td data-label="Kontak">
