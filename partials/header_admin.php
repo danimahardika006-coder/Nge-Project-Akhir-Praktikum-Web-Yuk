@@ -54,7 +54,7 @@ if (isset($koneksi)) {
         </nav>
 
         <div class="userbar">
-            <span class="who">Masuk sebagai <strong><?php echo e($user['username']); ?></strong></span>
+            <span class="who">Login Sebagai <strong style="text-transform: uppercase;"><?php echo e($user['role']); ?></strong></span>
             <a href="<?php echo e(url('logout.php')); ?>">Keluar</a>
         </div>
     </div>

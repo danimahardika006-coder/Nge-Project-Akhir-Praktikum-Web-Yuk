@@ -47,7 +47,7 @@ function nav_cls(string $slug, string $aktif): string
         </nav>
 
         <div class="userbar">
-            <span class="who">Halo, <strong><?php echo e($user['nama_lengkap']); ?></strong></span>
+            <span class="who">Login Sebagai <strong style="text-transform: uppercase;"><?php echo e($user['role']); ?></strong></span>
             <a href="<?php echo e(url('logout.php')); ?>">Keluar</a>
         </div>
     </div>
