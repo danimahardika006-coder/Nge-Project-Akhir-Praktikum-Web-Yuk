@@ -116,7 +116,8 @@ Akun Budi (no_hp: 081234567890)
 Semua halaman admin diawasi: hanya akun ber-role `admin` yang bisa masuk, pelanggan otomatis ditendang balik.
 
 ### Panel Kasir (`dashboard.php`) — fitur lama, tetap utuh
-- Catat pesanan walk-in tanpa akun, update status (Antrean/Dicuci/Selesai/Diambil), hapus pesanan.
+- Catat pesanan walk-in tanpa akun dengan layanan dan paket aktif dari database; total menggabungkan harga layanan dan tambahan harga paket.
+- Update status (Antrean/Dicuci/Selesai/Diambil), hapus pesanan, dan lacak nama paket pada transaksi.
 - Kartu pendapatan **kasir**: total walk-in Selesai/Diambil. Pendapatan booking online tampil terpisah di halaman Data Booking.
 - Dilengkapi navigasi ke halaman-halaman booking.
 

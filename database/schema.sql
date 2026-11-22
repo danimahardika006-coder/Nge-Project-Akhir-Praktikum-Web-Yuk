@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS order_status_history (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------------------------
--- transactions : pesanan walk-in dari panel kasir (STRUKTUR LAMA, tidak diubah)
+-- transactions : pesanan walk-in dari panel kasir
 -- --------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS transactions (
     id             INT AUTO_INCREMENT PRIMARY KEY,
@@ -124,7 +124,11 @@ CREATE TABLE IF NOT EXISTS transactions (
     nama_pelanggan VARCHAR(100) NOT NULL,
     no_hp          VARCHAR(20) NOT NULL,
     service_id     INT NOT NULL,
+    paket_id       INT DEFAULT NULL,
     tanggal_masuk  DATE NOT NULL,
     status         VARCHAR(30) NOT NULL DEFAULT 'Antrean',
-    total_harga    INT NOT NULL
+    total_harga    INT NOT NULL,
+    KEY idx_transactions_paket (paket_id),
+    CONSTRAINT fk_transactions_paket
+        FOREIGN KEY (paket_id) REFERENCES pakets(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

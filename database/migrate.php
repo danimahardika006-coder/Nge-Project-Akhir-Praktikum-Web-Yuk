@@ -325,11 +325,22 @@ if (!tabel_ada($koneksi, 'order_status_history')) {
 }
 
 // --------------------------------------------------------------------------
-// 7. transactions — tautan opsional pesanan kasir ke akun pelanggan
+// 7. transactions — tautan opsional pesanan kasir ke paket dan akun pelanggan
 // --------------------------------------------------------------------------
-// Kolom user_id bersifat OPSIONAL: pesanan lama tetap valid tanpa akun,
-// dan pencocokan nomor HP tetap menjadi mekanisme utama. Kolom ini hanya
-// memperkuat: begitu admin mengaitkan pesanan, tautannya eksplisit.
+// Kedua kolom bersifat opsional agar transaksi lama tetap valid.
+// user_id memperkuat pencocokan nomor HP dengan tautan akun yang eksplisit.
+if (!kolom_ada($koneksi, 'transactions', 'paket_id')) {
+    jalankan($koneksi, "ALTER TABLE transactions
+        ADD COLUMN paket_id INT DEFAULT NULL AFTER service_id,
+        ADD INDEX idx_transactions_paket (paket_id),
+        ADD CONSTRAINT fk_transactions_paket FOREIGN KEY (paket_id)
+            REFERENCES pakets(id) ON DELETE SET NULL");
+    baris('[+] transactions.paket_id ditambahkan (tautan opsional ke paket)');
+    $langkah++;
+} else {
+    baris('[=] transactions.paket_id sudah ada');
+}
+
 if (!kolom_ada($koneksi, 'transactions', 'user_id')) {
     jalankan($koneksi, "ALTER TABLE transactions
         ADD COLUMN user_id INT DEFAULT NULL AFTER no_hp,

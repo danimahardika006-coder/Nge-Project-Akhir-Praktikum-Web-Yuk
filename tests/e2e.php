@@ -468,11 +468,15 @@ cek('panel kasir lama tetap terbuka', $r['status'] === 200 && strpos($r['body'],
 $t = token($r['body']);
 $r = http('POST', "$BASE/dashboard.php", [
     'csrf_token' => $t, 'tambahTransaksi' => '1', 'nama_pelanggan' => 'Walk In Uji',
-    'no_hp' => '081211112222', 'service_id' => $svc['id'], 'tanggal_masuk' => date('Y-m-d'),
+    'no_hp' => '081211112222', 'service_id' => $svc['id'], 'paket_id' => $pkt['id'],
+    'tanggal_masuk' => date('Y-m-d'),
 ], $jarA);
 cek('tambah transaksi kasir masih berfungsi', strpos($r['body'], 'Pesanan dicatat dengan nomor') !== false);
 
-$s = $koneksi->query('SELECT no_pesanan FROM transactions ORDER BY id DESC LIMIT 1')->fetch_assoc();
+$s = $koneksi->query('SELECT no_pesanan, paket_id, total_harga FROM transactions ORDER BY id DESC LIMIT 1')->fetch_assoc();
+cek('paket transaksi kasir tersimpan dan harga dijumlahkan',
+    (int) $s['paket_id'] === (int) $pkt['id']
+    && (int) $s['total_harga'] === (int) $svc['harga'] + (int) $pkt['tambahan_harga']);
 $r = http('GET', "$BASE/tracking.php?no_pesanan=" . urlencode($s['no_pesanan']), [], null);
 cek('tracking TRX lama masih berfungsi', strpos($r['body'], $s['no_pesanan']) !== false);
 

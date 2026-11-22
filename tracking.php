@@ -67,9 +67,10 @@ if ($input !== null) {
 
             $stmt = mysqli_prepare(
                 $koneksi,
-                "SELECT t.no_pesanan, t.nama_pelanggan, t.no_hp, t.tanggal_masuk, t.status, t.total_harga, s.nama_layanan
+                "SELECT t.no_pesanan, t.nama_pelanggan, t.no_hp, t.tanggal_masuk, t.status, t.total_harga, s.nama_layanan, p.nama_paket
                  FROM transactions t
                  JOIN services s ON t.service_id = s.id
+                 LEFT JOIN pakets p ON t.paket_id = p.id
                  WHERE t.no_pesanan = ?
                  LIMIT 1"
             );
@@ -194,6 +195,10 @@ if ($order) {
             <div>
                 <dt>Layanan</dt>
                 <dd><?php echo e($order['nama_layanan']); ?></dd>
+            </div>
+            <div>
+                <dt>Paket</dt>
+                <dd><?php echo e($order['nama_paket'] ?? 'Tidak dipilih'); ?></dd>
             </div>
             <div>
                 <dt>Tanggal masuk</dt>
