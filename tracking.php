@@ -67,12 +67,11 @@ if ($input !== null) {
 
             $stmt = mysqli_prepare(
                 $koneksi,
-                "SELECT t.no_pesanan, t.nama_pelanggan, t.no_hp, t.tanggal_masuk, t.status, t.total_harga, s.nama_layanan, p.nama_paket
-                 FROM transactions t
-                 JOIN services s ON t.service_id = s.id
-                 LEFT JOIN pakets p ON t.paket_id = p.id
-                 WHERE t.no_pesanan = ?
-                 LIMIT 1"
+                "SELECT t.no_pesanan, t.nama_pelanggan, t.no_hp, t.tanggal_masuk, t.status, t.total_harga, s.nama_layanan
+                FROM transactions t
+                JOIN services s ON t.service_id = s.id
+                WHERE t.no_pesanan = ?
+                LIMIT 1"
             );
             mysqli_stmt_bind_param($stmt, "s", $kode);
             mysqli_stmt_execute($stmt);
