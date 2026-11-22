@@ -181,7 +181,7 @@ $hari_ini = $hari[(int) date('w')] . ', ' . tanggal_id(date('Y-m-d'));
         </nav>
 
         <div class="userbar">
-            <span class="who">Masuk sebagai <strong><?php echo e($_SESSION['username']); ?></strong></span>
+            <span class="who">Login Sebagai <strong style="text-transform: uppercase"><?php echo e($_SESSION['role']); ?></strong></span>
             <a href="logout.php">Keluar</a>
         </div>
     </div>
