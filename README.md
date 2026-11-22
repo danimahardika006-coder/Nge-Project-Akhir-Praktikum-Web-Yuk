@@ -303,8 +303,6 @@ Parameter URL: `?sort=<kolom>&arah=<asc|desc>`. Nilai `sort` divalidasi terhadap
 ├── database/
 │   ├── migrate.php          ← migrasi idempotent (jalankan sekali)
 │   ├── schema.sql           ← skema referensi
-│   ├── generate_erd.py      ← gambar ERD gaya tabel (baca information_schema)
-│   └── generate_erd_chen.py ← gambar ERD notasi Chen
 │
 ├── docs/
 │   ├── erd.png              ← ERD gaya database/Workbench
@@ -315,16 +313,6 @@ Parameter URL: `?sort=<kolom>&arah=<asc|desc>`. Nilai `sort` divalidasi terhadap
 │
 └── assets/
     └── style.css            ← seluruh desain (satu file)
-```
-
-### Membuat ulang gambar ERD
-
-Kedua skrip membaca **database yang sedang jalan** (bukan skema hardcoded), jadi gambar selalu sesuai kondisi nyata:
-
-```bash
-python3 -m pip install --user Pillow     # sekali saja
-python3 database/generate_erd.py         # → docs/erd.png
-python3 database/generate_erd_chen.py    # → docs/erd-chen.png
 ```
 
 ## Keamanan
