@@ -15,10 +15,11 @@ Dokumen ini menjelaskan **cara kerja kode di proyek ini**, konsep di baliknya, d
 7. [Sistem Status & Riwayat](#7-sistem-status--riwayat)
 8. [Pesanan Outlet Tertaut ke Akun](#7b-pesanan-outlet-tertaut-ke-akun--normalisasi-nomor-hp)
 9. [Migrasi Database Idempotent](#8-migrasi-database-idempotent)
-10. [Desain UI & CSS](#9-desain-ui--css)
-11. [Testing E2E](#10-testing-e2e)
-12. [Keputusan Desain: Kenapa Dibuat Begini](#11-keputusan-desain-kenapa-dibuat-begitu)
-13. [Ide Pengembangan Lanjutan](#12-ide-pengembangan-lanjutan)
+10. [Server-Side Sorting & Filter yang Aman](#8b-server-side-sorting--filter-yang-aman)
+11. [Desain UI & CSS](#9-desain-ui--css)
+12. [Testing E2E](#10-testing-e2e)
+13. [Keputusan Desain: Kenapa Dibuat Begini](#11-keputusan-desain-kenapa-dibuat-begitu)
+14. [Ide Pengembangan Lanjutan](#12-ide-pengembangan-lanjutan)
 
 ---
 
@@ -480,6 +481,69 @@ Data tanpa riwayat boleh hilang; data dengan riwayat cukup disembunyikan dari fo
 
 ---
 
+## 8b. Server-Side Sorting & Filter yang Aman
+
+Halaman daftar akun (`admin/data_pelanggan.php`) memakai pola yang layak ditiru untuk **semua tabel admin** dengan data besar.
+
+### Masalah
+
+Tabel akun tumbuh seiring waktu. Admin perlu: (1) memisahkan admin vs pelanggan, (2) mengurutkan berdasarkan kolom mana pun. Cara naif — sort di JavaScript di browser — bekerja untuk 50 baris tapi rusak untuk 5.000: semua data harus dikirim dulu, lalu DOM dimanipulasi penuh.
+
+### Solusi: sort di SQL, validasi dengan whitelist
+
+```php
+$kolom_sort = [
+    'nama'    => 'u.nama_lengkap',
+    'email'   => 'u.email',
+    'role'    => 'u.role',
+    'booking' => 'total_booking',      // alias subquery
+    'belanja' => 'total_belanja',
+    'status'  => 'u.status_akun',
+];
+$f_sort = $_GET['sort'] ?? 'role';
+if (!isset($kolom_sort[$f_sort])) { $f_sort = 'role'; }
+$f_arah = ($_GET['arah'] ?? 'asc') === 'desc' ? 'desc' : 'asc';
+
+$q .= ' ORDER BY ' . $kolom_sort[$f_sort] . ' ' . strtoupper($f_arah);
+```
+
+**Kenapa whitelist, bukan prepared statement?** `ORDER BY` tidak bisa di-bind — nama kolom bukan nilai. Pola amannya: **peta whitelist** — input user hanya boleh menjadi *kunci* yang memilih dari daftar kolom yang kita definisikan sendiri. Nilai asing (`sort=id; DROP TABLE`) jatuh ke default, bukan dieksekusi. Arah juga di-reduce ke dua nilai (`asc`/`desc`) — string apa pun selain `desc` menjadi `asc`.
+
+### Filter peran: auto-submit + URL sebagai state
+
+```html
+<select name="role" data-auto-submit>
+```
+
+```js
+document.querySelectorAll('[data-auto-submit]').forEach(function (el) {
+    el.addEventListener('change', function () { el.form.submit(); });
+});
+```
+
+Dua keputusan desain di sini:
+
+1. **Auto-submit** — mengubah dropdown langsung memuat ulang halaman. Untuk filter biner (semua/pelanggan/admin), tombol "Terapkan" hanya langkah ekstra yang tidak memberi informasi.
+2. **URL sebagai sumber kebenaran** — `?role=admin&sort=belanja&arah=desc` berarti tampilan bisa di-refresh, di-bookmark, dan di-share tanpa state tersembunyi. Ini prinsip REST yang sama dengan `GET /users?role=admin&sort=name`.
+
+### State tidak hilang setelah POST
+
+Tombol Aktifkan/Nonaktifkan adalah POST yang diikuti redirect (pola PRG). Tanpa langkah ekstra, redirect mengembalikan admin ke **daftar polos** — filter dan urutan hilang setiap kali satu akun dinonaktifkan. Perbaikannya: form aksi membawa hidden fields (`balik_role`, `balik_cari`, `balik_sort`, `balik_arah`), dan handler POST memasukkannya kembali ke Location redirect.
+
+Ini detail kecil yang menentukan apakah halaman admin terasa profesional atau menyebalkan: **aksi sekecil apa pun tidak boleh mereset konteks kerja user.**
+
+### Bug nyata yang ditemukan saat menambah fitur
+
+Markup nama pelanggan awalnya ditulis:
+
+```php
+<a<?php echo (int) $u['id']; ?>><?php echo e($u['nama_lengkap']); ?></a>
+```
+
+Hasilnya `<a14>Nama</a>` — bukan link. Browser mem-parse `<a14>` sebagai elemen custom unknown, bukan anchor, sehingga **nama tidak bisa diklik** dan struktur sel bergeser. Pelajarannya: elemen HTML yang tidak valid tidak error di PHP (string apapun sah untuk `echo`), jadi satu-satunya pertahanan adalah **memeriksa HTML yang dirender**, bukan cuma kode PHP-nya.
+
+---
+
 ## 9. Desain UI & CSS
 
 Satu file `assets/style.css` (~1.355 baris) memuat semuanya, dengan **custom properties** sebagai design tokens:
@@ -556,6 +620,9 @@ Beberapa perilaku lebih mudah diperiksa langsung lewat HTTP + query DB:
 | `transactions.user_id` → `ON DELETE SET NULL` | `CASCADE` | Menghapus akun tidak boleh menghapus nota kasir; tautan bisa dibangun ulang dari nomor HP |
 | Status mundur dibolehkan + konfirmasi UI | Memblokir di server | Admin bisa salah klik; riwayat append-only membuat mundur tetap tercatat jujur |
 | Pendapatan kasir & booking dipisah per halaman | Satu angka gabungan di kasir | Sumbernya beda tabel (`transactions` vs `bookings`); pendapatan booking tampil di halaman Data Booking tempat admin mengerjakannya |
+| Harga kasir = layanan + paket, dihitung ulang di server | Percaya total yang dikirim form | Sama dengan booking: harga selalu fresh dari DB (`services.harga` + `pakets.tambahan_harga`); form tidak bisa memanipulasi total |
+| `transactions.paket_id` nullable | Wajib pilih paket | Pesanan kasir lama tetap valid; paket jadi opsi, bukan syarat |
+| Sort tabel via whitelist kolom | `ORDER BY ?` prepared statement / sort JS | `ORDER BY` tidak bisa di-bind; whitelist memilih dari kolom yang kita definisikan sendiri — input asing jatuh ke default |
 
 ---
 

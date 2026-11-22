@@ -13,6 +13,7 @@ Aplikasi web cuci sepatu dengan dua sisi: **panel kasir** untuk pesanan walk-in 
 - [Alur Status Booking](#alur-status-booking)
 - [Instalasi](#instalasi)
 - [Struktur Database](#struktur-database)
+- [Daftar Akun: Filter & Sort](#daftar-akun-filter--sort)
 - [Struktur Folder](#struktur-folder)
 - [Keamanan](#keamanan)
 - [Pengujian](#pengujian)
@@ -26,7 +27,7 @@ Aplikasi web cuci sepatu dengan dua sisi: **panel kasir** untuk pesanan walk-in 
 |---|---|
 | **Publik** | Lacak pesanan kasir (`TRX-…`) & booking online (`BK-…`) |
 | **Pelanggan** | Registrasi, login, dashboard, booking online dengan slot waktu, riwayat cucian **gabungan (booking online + pesanan outlet)**, detail booking + timeline 7 tahap, batalkan booking, edit profil, ganti password |
-| **Admin** | Panel kasir walk-in (lama), kelola booking online (konfirmasi/tolak/**update status termasuk mundur** + catatan), kelola akun pelanggan (aktif/nonaktif, **lihat pesanan outlet pelanggan**), kelola layanan/paket/tipe sepatu (tambah/edit/**hapus cerdas**), template layanan otomatis, **pendapatan terpisah (kasir vs booking)** |
+| **Admin** | Panel kasir walk-in dengan **paket pengerjaan** (harga = layanan + tambahan paket), kelola booking online (konfirmasi/tolak/**update status termasuk mundur** + catatan), kelola akun pelanggan (aktif/nonaktif, **filter peran + sort kolom**, **lihat pesanan outlet pelanggan**), kelola layanan/paket/tipe sepatu (tambah/edit/**hapus cerdas**), template layanan otomatis, **pendapatan terpisah (kasir vs booking)** |
 
 ## Alur Lengkap Pemakaian
 
@@ -116,8 +117,10 @@ Akun Budi (no_hp: 081234567890)
 Semua halaman admin diawasi: hanya akun ber-role `admin` yang bisa masuk, pelanggan otomatis ditendang balik.
 
 ### Panel Kasir (`dashboard.php`) — fitur lama, tetap utuh
-- Catat pesanan walk-in tanpa akun dengan layanan dan paket aktif dari database; total menggabungkan harga layanan dan tambahan harga paket.
+- Catat pesanan walk-in tanpa akun dengan **layanan dan paket aktif** dari database; total = harga layanan + tambahan harga paket (dihitung ulang di server).
+- Dropdown paket hanya menampilkan paket berstatus aktif; paket tanpa tambahan biaya tetap bisa dipilih.
 - Update status (Antrean/Dicuci/Selesai/Diambil), hapus pesanan, dan lacak nama paket pada transaksi.
+- **Total harga live** di form: berubah otomatis saat layanan/paket diganti (JS vanilla, data harga dari atribut `data-harga` di option).
 - Kartu pendapatan **kasir**: total walk-in Selesai/Diambil. Pendapatan booking online tampil terpisah di halaman Data Booking.
 - Dilengkapi navigasi ke halaman-halaman booking.
 
@@ -136,6 +139,8 @@ Semua halaman admin diawasi: hanya akun ber-role `admin` yang bisa masuk, pelang
 
 ### Data Pelanggan (`admin/data_pelanggan.php` + `admin/pelanggan.php`)
 - Daftar semua akun + jumlah booking per orang.
+- **Filter peran** (Semua / Pelanggan / Admin) — langsung diterapkan begitu dropdown diganti, tanpa perlu klik tombol Cari.
+- **Sort kolom** — klik header tabel (Nama, Kontak, Peran, Booking, Belanja, Status) untuk mengurutkan; klik lagi untuk membalik arah (▲/▼). Filter & urutan tetap tersimpan setelah aksi nonaktif/aktifkan.
 - **Aktifkan / nonaktifkan akun** — akun nonaktif tidak bisa login.
 - Profil per pelanggan + seluruh riwayat booking online, **plus pesanan outlet** yang tertaut lewat nomor HP.
 - Tombol **Tautkan** untuk mengaitkan pesanan kasir tertentu ke akun secara eksplisit.
@@ -186,6 +191,7 @@ Menunggu Konfirmasi → Dikonfirmasi → Sepatu Diterima → Sedang Dicuci
    - Membuat tabel baru: `pakets`, `tipe_sepatu`, `bookings`, `order_status_history`.
    - Menambah kolom `role`, `no_hp`, `status_akun` ke tabel `users` yang sudah ada — **semua akun lama otomatis menjadi admin**.
    - Menambah kolom `transactions.user_id` (nullable, `ON DELETE SET NULL`) untuk menautkan nota kasir ke akun pelanggan.
+|Migrasi juga menambah kolom `transactions.paket_id` (nullable, `ON DELETE SET NULL`) untuk menyimpan paket yang dipilih kasir.
    - Mengisi **template awal**: 5 layanan, 5 paket, 8 tipe sepatu (hanya bila tabel masih kosong).
    - Tidak menghapus / mengubah data apa pun yang sudah ada. Jalankan berapa kali pun hasilnya sama.
 
@@ -233,6 +239,35 @@ users ──┬──< bookings >──┬── services
 2. **Manual** — admin klik "Tautkan" di halaman detail pelanggan → `transactions.user_id` diisi.
 
 Skema referensi lengkap: [`database/schema.sql`](database/schema.sql).
+
+## Daftar Akun: Filter & Sort
+
+Halaman `admin/data_pelanggan.php` punya dua kontrol tampilan yang bekerja bersama:
+
+### Filter peran
+| Pilihan | Hasil |
+|---|---|
+| Semua peran | admin + pelanggan |
+| Pelanggan | hanya `role = 'customer'` |
+| Admin | hanya `role = 'admin'` |
+
+Dropdown **langsung menerapkan filter** saat diganti (auto-submit) — tidak perlu klik "Cari". Nilai filter masuk ke URL (`?role=admin`) sehingga bisa di-bookmark/di-refresh.
+
+### Sort kolom
+Klik judul kolom untuk mengurutkan. Klik sekali lagi untuk membalik arah.
+
+| Kolom | Diurutkan berdasarkan |
+|---|---|
+| Nama | `users.nama_lengkap` |
+| Kontak | `users.email` |
+| Peran | `users.role` |
+| Booking | jumlah booking akun tersebut |
+| Belanja | total belanja booking `selesai` |
+| Status | `users.status_akun` |
+
+Parameter URL: `?sort=<kolom>&arah=<asc|desc>`. Nilai `sort` divalidasi terhadap **whitelist** di server — nilai asing otomatis jatuh ke `role`, jadi tidak ada celah SQL injection lewat parameter urutan.
+
+**Filter dan sort saling mempertahankan**: form filter membawa `sort`/`arah` sebagai hidden field, dan tombol Aktifkan/Nonaktifkan membawa `balik_role`/`balik_cari`/`balik_sort`/`balik_arah` — setelah aksi POST, admin kembali ke tampilan yang sama, bukan daftar polos.
 
 ## Struktur Folder
 
@@ -338,6 +373,8 @@ Output diakhiri dengan rekap `LULUS: N  GAGAL: N`.
 | Masalah | Solusi |
 |---|---|
 | Dropdown layanan/paket/tipe kosong | Jalankan `php database/migrate.php` — template diisi otomatis bila tabel masih kosong |
+| Dropdown paket di panel kasir kosong | Semua paket mungkin dinonaktifkan admin — aktifkan lagi di halaman **Layanan**, atau jalankan migrasi |
+| Total kasir tidak menjumlahkan paket | Pastikan `transactions.paket_id` sudah ada (`php database/migrate.php`) — kolom ini ditambahkan migrasi |
 | "Sesi formulir kedaluwarsa" (HTTP 419) | Muat ulang halaman lalu submit lagi — token CSRF per halaman |
 | Tidak bisa login padahal password benar | Akun mungkin dinonaktifkan admin — cek di `admin/data_pelanggan.php` |
 | `Koneksi gagal` | Pastikan MySQL jalan dan database `db_cuci_sepatu` sudah dibuat; port non-standar pakai env `DB_PORT` |

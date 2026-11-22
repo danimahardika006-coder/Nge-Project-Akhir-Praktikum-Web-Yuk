@@ -32,12 +32,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash_set('Akun ' . $target['username'] . ' diaktifkan kembali.');
     }
 
-    header('Location: data_pelanggan.php');
+    // Kembali ke daftar dengan filter & urutan yang sama (jangan reset tampilan admin)
+    $balik = array_filter([
+        'role' => $_POST['balik_role'] ?? '',
+        'cari' => $_POST['balik_cari'] ?? '',
+        'sort' => $_POST['balik_sort'] ?? '',
+        'arah' => $_POST['balik_arah'] ?? '',
+    ], fn ($v) => $v !== '');
+    header('Location: data_pelanggan.php' . ($balik ? '?' . http_build_query($balik) : ''));
     exit();
 }
 
 $f_cari = trim($_GET['cari'] ?? '');
 $f_role = trim($_GET['role'] ?? '');
+
+// ---------- Sorting (whitelist, anti SQL injection) ----------
+$kolom_sort = [
+    'nama'     => 'u.nama_lengkap',
+    'email'    => 'u.email',
+    'role'     => 'u.role',
+    'booking'  => 'total_booking',
+    'belanja'  => 'total_belanja',
+    'status'   => 'u.status_akun',
+];
+$f_sort  = $_GET['sort'] ?? 'role';
+$f_arah  = strtolower($_GET['arah'] ?? 'asc');
+if (!isset($kolom_sort[$f_sort])) {
+    $f_sort = 'role';
+}
+$f_arah = $f_arah === 'desc' ? 'desc' : 'asc';
+$arah_lawan = $f_arah === 'asc' ? 'desc' : 'asc';
 
 $q    = "SELECT u.*,
             (SELECT COUNT(*) FROM bookings b WHERE b.user_id = u.id) AS total_booking,
@@ -59,7 +83,7 @@ if ($f_cari !== '') {
     $like = '%' . $f_cari . '%';
     array_push($args, $like, $like, $like, $like);
 }
-$q .= ' ORDER BY u.role ASC, u.id ASC';
+$q .= ' ORDER BY ' . $kolom_sort[$f_sort] . ' ' . strtoupper($f_arah) . ', u.role ASC, u.id ASC';
 
 $stmt = mysqli_prepare($koneksi, $q);
 if ($tipe !== '') {
@@ -78,6 +102,39 @@ if ($res) {
 $judul = 'Data Pelanggan';
 $aktif = 'pelanggan';
 require dirname(__DIR__) . '/partials/header_admin.php';
+
+// Helper: URL untuk link sort di header tabel
+function sort_url(string $kolom, string $f_sort, string $f_arah, string $f_role, string $f_cari): string
+{
+    $qs = http_build_query(array_filter([
+        'sort' => $kolom,
+        'arah' => ($f_sort === $kolom && $f_arah === 'asc') ? 'desc' : 'asc',
+        'role' => $f_role,
+        'cari' => $f_cari,
+    ], fn ($v) => $v !== ''));
+    return 'data_pelanggan.php' . ($qs !== '' ? '?' . $qs : '');
+}
+
+// Helper: ikon penanda kolom yang sedang diurutkan
+function sort_ikon(string $kolom, string $f_sort, string $f_arah): string
+{
+    if ($f_sort !== $kolom) {
+        return '<span class="sort-ikon" aria-hidden="true">↕</span>';
+    }
+    return '<span class="sort-ikon sort-aktif" aria-hidden="true">' . ($f_arah === 'asc' ? '▲' : '▼') . '</span>';
+}
+
+// Helper: hidden field agar filter & urutan tetap sama setelah aksi POST
+function balik_filter_field(string $f_role, string $f_cari, string $f_sort, string $f_arah): string
+{
+    $out = '';
+    foreach (['balik_role' => $f_role, 'balik_cari' => $f_cari, 'balik_sort' => $f_sort, 'balik_arah' => $f_arah] as $nama => $nilai) {
+        if ($nilai !== '') {
+            $out .= '<input type="hidden" name="' . $nama . '" value="' . e($nilai) . '">';
+        }
+    }
+    return $out;
+}
 ?>
 
 <div class="page-head">
@@ -94,13 +151,15 @@ require dirname(__DIR__) . '/partials/header_admin.php';
             <p class="panel-sub">Klik nama untuk membuka riwayat cucian pelanggan.</p>
         </div>
         <form class="search-inline" method="GET" action="data_pelanggan.php">
-            <select class="select select-sm" name="role" aria-label="Filter peran">
+            <select class="select select-sm" name="role" aria-label="Filter peran" data-auto-submit>
                 <option value="">Semua peran</option>
                 <option value="customer" <?php echo $f_role === 'customer' ? 'selected' : ''; ?>>Pelanggan</option>
                 <option value="admin" <?php echo $f_role === 'admin' ? 'selected' : ''; ?>>Admin</option>
             </select>
             <input class="input input-sm" type="search" name="cari" placeholder="Cari nama / email / HP…"
                    value="<?php echo e($f_cari); ?>">
+            <input type="hidden" name="sort" value="<?php echo e($f_sort); ?>">
+            <input type="hidden" name="arah" value="<?php echo e($f_arah); ?>">
             <button class="btn btn-outline btn-sm" type="submit">Cari</button>
         </form>
     </div>
@@ -112,12 +171,12 @@ require dirname(__DIR__) . '/partials/header_admin.php';
         <table class="orders">
             <thead>
                 <tr>
-                    <th scope="col">Nama</th>
-                    <th scope="col">Kontak</th>
-                    <th scope="col">Peran</th>
-                    <th scope="col" class="num">Booking</th>
-                    <th scope="col" class="col-money">Belanja</th>
-                    <th scope="col">Status</th>
+                    <th scope="col"><a class="sort-link" href="<?php echo e(sort_url('nama', $f_sort, $f_arah, $f_role, $f_cari)); ?>">Nama <?php echo sort_ikon('nama', $f_sort, $f_arah); ?></a></th>
+                    <th scope="col"><a class="sort-link" href="<?php echo e(sort_url('email', $f_sort, $f_arah, $f_role, $f_cari)); ?>">Kontak <?php echo sort_ikon('email', $f_sort, $f_arah); ?></a></th>
+                    <th scope="col"><a class="sort-link" href="<?php echo e(sort_url('role', $f_sort, $f_arah, $f_role, $f_cari)); ?>">Peran <?php echo sort_ikon('role', $f_sort, $f_arah); ?></a></th>
+                    <th scope="col" class="num"><a class="sort-link" href="<?php echo e(sort_url('booking', $f_sort, $f_arah, $f_role, $f_cari)); ?>">Booking <?php echo sort_ikon('booking', $f_sort, $f_arah); ?></a></th>
+                    <th scope="col" class="col-money"><a class="sort-link" href="<?php echo e(sort_url('belanja', $f_sort, $f_arah, $f_role, $f_cari)); ?>">Belanja <?php echo sort_ikon('belanja', $f_sort, $f_arah); ?></a></th>
+                    <th scope="col"><a class="sort-link" href="<?php echo e(sort_url('status', $f_sort, $f_arah, $f_role, $f_cari)); ?>">Status <?php echo sort_ikon('status', $f_sort, $f_arah); ?></a></th>
                     <th scope="col" class="col-action"><span class="sr-only">Aksi</span></th>
                 </tr>
             </thead>
@@ -125,7 +184,7 @@ require dirname(__DIR__) . '/partials/header_admin.php';
             <?php foreach ($daftar as $u): ?>
                 <tr>
                     <td>
-                        <div class="cell-main"><a<?php echo (int) $u['id']; ?>><?php echo e($u['nama_lengkap']); ?></a></div>
+                        <div class="cell-main"><a href="pelanggan.php?id=<?php echo (int) $u['id']; ?>"><?php echo e($u['nama_lengkap']); ?></a></div>
                         <div class="cell-sub">@<?php echo e($u['username']); ?></div>
                     </td>
                     <td data-label="Kontak">
@@ -154,6 +213,7 @@ require dirname(__DIR__) . '/partials/header_admin.php';
                                 <?php echo csrf_field(); ?>
                                 <input type="hidden" name="user_id" value="<?php echo (int) $u['id']; ?>">
                                 <input type="hidden" name="aksi" value="nonaktif">
+                                <?php echo balik_filter_field($f_role, $f_cari, $f_sort, $f_arah); ?>
                                 <button class="btn-text" type="submit">Nonaktifkan</button>
                             </form>
                             <?php else: ?>
@@ -161,6 +221,7 @@ require dirname(__DIR__) . '/partials/header_admin.php';
                                 <?php echo csrf_field(); ?>
                                 <input type="hidden" name="user_id" value="<?php echo (int) $u['id']; ?>">
                                 <input type="hidden" name="aksi" value="aktifkan">
+                                <?php echo balik_filter_field($f_role, $f_cari, $f_sort, $f_arah); ?>
                                 <button class="btn-text" type="submit">Aktifkan</button>
                             </form>
                             <?php endif; ?>
@@ -173,5 +234,14 @@ require dirname(__DIR__) . '/partials/header_admin.php';
     </div>
     <?php endif; ?>
 </section>
+
+<script>
+(function () {
+    // Filter peran langsung diterapkan begitu dropdown diganti
+    document.querySelectorAll('[data-auto-submit]').forEach(function (el) {
+        el.addEventListener('change', function () { el.form.submit(); });
+    });
+})();
+</script>
 
 <?php require dirname(__DIR__) . '/partials/footer_customer.php'; ?>
