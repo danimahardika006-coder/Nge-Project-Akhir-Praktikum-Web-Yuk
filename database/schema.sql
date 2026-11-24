@@ -132,3 +132,25 @@ CREATE TABLE IF NOT EXISTS transactions (
     CONSTRAINT fk_transactions_paket
         FOREIGN KEY (paket_id) REFERENCES pakets(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO users (
+    username,
+    nama_lengkap,
+    email,
+    password,
+    no_hp,
+    role,
+    status_akun,
+    dibuat_pada,
+    diperbarui_pada
+) VALUES (
+    'admin',
+    'Administrator',
+    'admin@cucisepatu.com',
+    '$2y$10$3MEp/HV.QexbppxSR5i.3OMM6uBQIT30s3bO2eIlMN5CAl9PZ8IzG',
+    '081234567890',
+    'admin',
+    'aktif',
+    NOW(),
+    NOW()
+);
